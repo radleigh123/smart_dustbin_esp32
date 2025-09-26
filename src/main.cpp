@@ -12,8 +12,6 @@
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
 
-Servo servo;
-
 // Wi-Fi credentials
 #define WIFI_SSID "GAMSUNG"
 #define WIFI_PASSWORD "aleahgwapa"
@@ -34,23 +32,93 @@ using AsyncClient = AsyncClientClass;
 AsyncClient aClient(ssl_client);
 RealtimeDatabase Database;
 
+Servo servo;
+
 // Variables for ultrasonic sensor
 float filterArray[20]; // array to hold the samples
 float distance;
 
 // Variables for database
-int localStatus = 0;  // 0: CLOSE, 1: OPEN (from ultrasonic)
-int remoteStatus = 0; // 0: CLOSE, 1: OPEN (from Firebase)
-int finalStatus = 0;  // what the servo actually does
+int status = 0;           // 0: CLOSE, 1: OPEN (from ultrasonic)
+bool manualMode = false;  // for ADMIN ONLY
+int manualServoAngle = 0; // for ADMIN ONLY
 
-String binId = "bin1";
+String binId;
 unsigned long lastSendTime = 0;
-const unsigned long sendInterval = 5000; // Send data every 10 seconds
+const unsigned long sendInterval = 10000; // Send data every 10 seconds
 
 // User function
 void processData(AsyncResult &aResult);
 
 // Ultrasonic sensor function
+float ultrasonicMeasure();
+double getUltrasonicDistance();
+
+// Firebase setup
+void connectToWiFi();
+
+// Utility function
+String getTrashBinPath(const String &binId);
+
+void setup()
+{
+    Serial.begin(115200);
+
+    binId = WiFi.macAddress();
+    binId.replace(":", "");
+    Serial.println("Bin ID: " + binId);
+
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+
+    servo.attach(SERVO_PIN, 500, 2400); // min and max in microseconds
+    servo.write(0);                     // initial position
+
+    connectToWiFi(); // PURPOSE: Communicate to Firebase
+}
+
+void loop()
+{
+    /* app.loop(); // Required for Firebase to process authentication and tasks
+
+    // Check if Firebase is authenticated and ready
+    if (!app.ready())
+        return; */
+
+    // === LOCAL SENSOR LOGIC ===
+    distance = getUltrasonicDistance();
+    if (distance < DISTANCE_THRESHOLD)
+    {
+        status = 1; // 1: OPEN
+        servo.write(90);
+    }
+    else
+    {
+        status = 0; // 0: CLOSE
+        servo.write(0);
+    }
+
+    Serial.printf("Distance: %.2f cm, Status: %s\n", distance, status == 1 ? "OPEN" : "CLOSE");
+}
+
+void processData(AsyncResult &aResult)
+{
+    if (!aResult.isResult())
+        return;
+
+    if (aResult.isEvent())
+        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
+
+    if (aResult.isDebug())
+        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
+
+    if (aResult.isError())
+        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
+
+    if (aResult.available())
+        Firebase.printf("task: %s, payload: %s\n", aResult.uid().c_str(), aResult.c_str());
+}
+
 float ultrasonicMeasure()
 {
     // generate 10-microsecond pulse to TRIG pin
@@ -62,7 +130,6 @@ float ultrasonicMeasure()
     return 0.017 * duration_us;
 }
 
-// Ultrasonic sensor function with noise filtering
 double getUltrasonicDistance()
 {
     // 1. TAKING MULTIPLE MEASUREMENTS AND STORE IN AN ARRAY
@@ -100,171 +167,61 @@ double getUltrasonicDistance()
     return sum / 10;
 }
 
+void connectToWiFi()
+{
+    /* String ssid = prefs.getString("ssid", "");
+    String password = prefs.getString("password", "");
+    prefs.end();
+
+    if (WIFI_SSID == "" || WIFI_PASSWORD == "")
+    {
+        Serial.println("No Wi-Fi credentials stored");
+        return;
+    } */
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.printf("Connecting to Wi-Fi SSID: %s\n", WIFI_SSID);
+
+    int retries = 0;
+    while (WiFi.status() != WL_CONNECTED && retries < 40)
+    {
+        delay(500);
+        Serial.print(".");
+        retries++;
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.println("Connected to Wi-Fi!");
+        Serial.print("IP Address: ");
+        Serial.println(WiFi.localIP());
+
+        // Configure SSL client
+        ssl_client.setInsecure(); // Use with caution, for testing only
+        ssl_client.setTimeout(15000);
+        ssl_client.setHandshakeTimeout(2000);
+
+        // Initialize Firebase
+        initializeApp(aClient, app, getAuth(user_auth), processData, "🔐 authTask");
+        app.getApp<RealtimeDatabase>(Database);
+        Database.url(FIREBASE_HOST);
+
+        delay(1000);
+
+        // Subscribe to remote status changes
+        // Database.get(aClient, getTrashBinPath(binId), processData, "RTDB_Listen_Status");
+        // listen to any changes under /test/data
+        Database.setSSEFilters();
+        Database.get(aClient, "/test/data", processData, true, "RTDB_Listen_Status");
+    }
+    else
+    {
+        Serial.println("Wi-Fi failed to connect");
+    }
+}
+
 String getTrashBinPath(const String &binId)
 {
     return "/trash_bins/" + binId + "/status";
-}
-
-void setup()
-{
-    Serial.begin(115200);
-
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
-
-    servo.attach(SERVO_PIN, 500, 2400); // min and max in microseconds
-    servo.write(0);                     // initial position
-
-    // Connect to Wi-Fi
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.print(".");
-        delay(300);
-    }
-    Serial.println();
-    Serial.print("Connected with IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.println();
-
-    // Configure SSL client
-    ssl_client.setInsecure(); // Use with caution, for testing only
-    ssl_client.setTimeout(15000);
-    ssl_client.setHandshakeTimeout(2000);
-
-    // Initialize Firebase
-    initializeApp(aClient, app, getAuth(user_auth), processData, "🔐 authTask");
-    app.getApp<RealtimeDatabase>(Database);
-    Database.url(FIREBASE_HOST);
-
-    delay(1000);
-
-    // Subscribe to remote status changes
-    // Database.get(aClient, getTrashBinPath(binId), processData, "RTDB_Listen_Status");
-    // listen to any changes under /test/data
-    Database.setSSEFilters();
-    Database.get(aClient, "/test/data", processData, true, "RTDB_Listen_Status");
-}
-
-void loop()
-{
-    app.loop(); // Required for Firebase to process authentication and tasks
-
-    // Check if Firebase is authenticated and ready
-    if (!app.ready())
-        return;
-
-    // === LOCAL SENSOR LOGIC ===
-    distance = getUltrasonicDistance();
-    if (distance < DISTANCE_THRESHOLD)
-    {
-        localStatus = 1; // 1: OPEN
-    }
-    else
-    {
-        localStatus = 0; // 0: CLOSE
-    }
-
-    // === FINAL STATUS (remote overrides local) ===
-    // Rule: If remote says OPEN → force open
-    // Otherwise use ultrasonic
-    if (remoteStatus == 1)
-    {
-        finalStatus = 1;
-    }
-    else
-    {
-        finalStatus = localStatus;
-    }
-
-    // === Actuate servo ===
-    if (finalStatus == 1)
-    {
-        servo.write(90);
-    }
-    else
-    {
-        servo.write(0);
-    }
-
-    // === Update DB if LOCAL changed ===
-    static int lastLocalStatus = -1;
-    if (localStatus != lastLocalStatus && millis() - lastSendTime > sendInterval)
-    {
-        lastLocalStatus = localStatus;
-        lastSendTime = millis();
-        // Database.set<int>(aClient, getTrashBinPath(binId), localStatus, processData, "RTDB_Send_Status");
-        Database.set<int>(aClient, "/test/data", localStatus, processData, "RTDB_Update_Status");
-        Serial.printf("Updated DB with local status: %s\n", localStatus ? "OPEN" : "CLOSE");
-    }
-
-    Serial.printf("Distance: %.2f cm | Local: %d | Remote: %d | Final: %d\n",
-                  distance, localStatus, remoteStatus, finalStatus);
-}
-
-void processData(AsyncResult &aResult)
-{
-    if (!aResult.isResult())
-        return;
-
-    if (aResult.isEvent())
-        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
-
-    if (aResult.isDebug())
-        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
-
-    if (aResult.isError())
-        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
-
-    if (aResult.available())
-    {
-        String uid = aResult.uid();
-        String payload = aResult.c_str();
-
-        Serial.println("=== Firebase Event ===");
-        Serial.printf("Task: %s\n", uid.c_str());
-        Serial.printf("Raw payload: %s\n", payload.c_str());
-
-        // Only process streaming events from the listener
-        if (uid == "RTDB_Listen_Status")
-        {
-            // Firebase can send various formats depending on the event type
-            // Let's try multiple parsing approaches
-
-            // Try parsing as {"data": value} format
-            if (payload.indexOf("\"data\"") >= 0)
-            {
-                int valueStart = payload.indexOf(":", payload.indexOf("\"data\"")) + 1;
-                int valueEnd = payload.indexOf("}", valueStart);
-                String valueStr = payload.substring(valueStart, valueEnd);
-                valueStr.trim();
-
-                remoteStatus = valueStr.toInt();
-                Serial.printf("Parsed remote status (format 1): %d\n", remoteStatus);
-            }
-            // Try parsing as {"path": "/", "data": value} format
-            else if (payload.indexOf("\"path\"") >= 0 && payload.indexOf("\"data\"") >= 0)
-            {
-                int valueStart = payload.indexOf(":", payload.indexOf("\"data\"")) + 1;
-                int valueEnd = payload.indexOf("}", valueStart);
-                if (valueEnd == -1)
-                    valueEnd = payload.indexOf(",", valueStart);
-                if (valueEnd == -1)
-                    valueEnd = payload.length() - 1;
-
-                String valueStr = payload.substring(valueStart, valueEnd);
-                valueStr.trim();
-
-                remoteStatus = valueStr.toInt();
-                Serial.printf("Parsed remote status (format 2): %d\n", remoteStatus);
-            }
-            // If simple numeric value
-            else if (payload.length() < 10 && isDigit(payload[0]))
-            {
-                remoteStatus = payload.toInt();
-                Serial.printf("Parsed remote status (format 3): %d\n", remoteStatus);
-            }
-        }
-    }
 }
