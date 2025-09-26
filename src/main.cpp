@@ -11,10 +11,19 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
+#include <WebServer.h>
+#include <Preferences.h>
+#include <ArduinoJson.h>
 
-// Wi-Fi credentials
-#define WIFI_SSID "GAMSUNG"
-#define WIFI_PASSWORD "aleahgwapa"
+// Server configuration
+Preferences prefs;
+WebServer server(80);
+// const char *apSSID = "Dustbin" + String(WiFi.macAddress());
+const char *apSSID = "Dustbin";
+const char *apPassword = "12345678";
+
+bool tryConnectSTA();
+void startAP();
 
 // Firebase project credentials
 #define WEB_API_KEY "AIzaSyAjVoD7YONx-VOaE_Ls8g8difj7a7_xlXI"
@@ -64,6 +73,17 @@ void setup()
 {
     Serial.begin(115200);
 
+    if (tryConnectSTA())
+    {
+        Serial.print("Connected to Wi-Fi in STA mode, IP: ");
+        Serial.println(WiFi.localIP());
+    }
+    else
+    {
+        Serial.println("Failed to connect in STA mode, starting AP...");
+        startAP();
+    }
+
     binId = WiFi.macAddress();
     binId.replace(":", "");
     Serial.println("Bin ID: " + binId);
@@ -74,11 +94,15 @@ void setup()
     servo.attach(SERVO_PIN, 500, 2400); // min and max in microseconds
     servo.write(0);                     // initial position
 
-    connectToWiFi(); // PURPOSE: Communicate to Firebase
+    // connectToWiFi(); // PURPOSE: Communicate to Firebase
 }
 
 void loop()
 {
+    if (WiFi.getMode() == WIFI_AP)
+    {
+        server.handleClient();
+    }
     /* app.loop(); // Required for Firebase to process authentication and tasks
 
     // Check if Firebase is authenticated and ready
@@ -169,19 +193,6 @@ double getUltrasonicDistance()
 
 void connectToWiFi()
 {
-    /* String ssid = prefs.getString("ssid", "");
-    String password = prefs.getString("password", "");
-    prefs.end();
-
-    if (WIFI_SSID == "" || WIFI_PASSWORD == "")
-    {
-        Serial.println("No Wi-Fi credentials stored");
-        return;
-    } */
-
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.printf("Connecting to Wi-Fi SSID: %s\n", WIFI_SSID);
-
     int retries = 0;
     while (WiFi.status() != WL_CONNECTED && retries < 40)
     {
@@ -224,4 +235,109 @@ void connectToWiFi()
 String getTrashBinPath(const String &binId)
 {
     return "/trash_bins/" + binId + "/status";
+}
+
+bool tryConnectSTA()
+{
+    prefs.begin("wifi", true);
+    String ssid = prefs.getString("ssid", "");
+    String password = prefs.getString("password", "");
+    prefs.end();
+
+    if (ssid == "" || password == "")
+    {
+        Serial.println("No Wi-Fi credentials stored");
+        return false;
+    }
+
+    Serial.printf("Stored SSID: %s, Password: %s\n", ssid.c_str(), password.c_str());
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid.c_str(), password.c_str());
+
+    Serial.printf("Connecting to Wi-Fi SSID: %s\n", ssid.c_str());
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 15000)
+    {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+    return WiFi.status() == WL_CONNECTED;
+}
+
+void startAP()
+{
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(apSSID, apPassword);
+    Serial.printf("Started AP SSID: %s, IP: %s\n", apSSID, WiFi.softAPIP().toString().c_str());
+    // Setup web server routes here if needed
+
+    // ROUTE: Index ping
+    server.on("/ping", HTTP_GET, []()
+              { server.send(200, "application/json", "{\"status\":\"success\"}"); });
+
+    // ROUTE: Update Wi-Fi credentials
+    server.on("/setwifi", HTTP_POST, []()
+              {
+                  if (server.hasArg("plain"))
+                  {
+                      StaticJsonDocument<200> doc;
+                      DeserializationError err = deserializeJson(doc, server.arg("plain"));
+                      if (!err) {
+                        String newSSID = doc["ssid"] | "";
+                        String newPassword = doc["password"] | "";
+
+                        prefs.begin("wifi", false);
+                        prefs.clear(); // Clear previous credentials
+                        prefs.putString("ssid", newSSID);
+                        prefs.putString("password", newPassword);
+                        prefs.end();
+
+                        Serial.println("Updated Wi-Fi credentials:");
+                        Serial.printf("SSID: %s, Password: %s\n", newSSID.c_str(), newPassword.c_str());
+
+                        // Verify
+                        prefs.begin("wifi", true);
+                        String verifySSID = prefs.getString("ssid", "");
+                        String verifyPassword = prefs.getString("password", "");
+                        prefs.end();
+                        Serial.printf("Verified SSID: %s, Password: %s\n", verifySSID.c_str(), verifyPassword.c_str());
+
+                        server.send(200, "application/json", "{\"status\":\"success\"}");
+                        delay(1000);
+                        ESP.restart();
+                      } else {
+                        server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+                      }
+                  } });
+
+    // ROUTE: Manual 1 for open 0 for close
+    server.on("/servo", HTTP_POST, []()
+              {
+                  if (server.hasArg("plain"))
+                  {
+                      StaticJsonDocument<200> doc;
+                      DeserializationError err = deserializeJson(doc, server.arg("plain"));
+                      if (!err) {
+                        int angle = doc["angle"] | 0;
+                        String mode = doc["mode"] | "auto";
+
+                        if (mode == "manual") {
+                            manualMode = true;
+                            manualServoAngle = constrain(angle, 0, 90);
+                            servo.write(manualServoAngle);
+                            Serial.printf("Manual mode: Servo angle set to %d\n", manualServoAngle);
+                        } else {
+                            manualMode = false;
+                            Serial.println("Switched to automatic mode");
+                        }
+
+                        server.send(200, "application/json", "{\"status\":\"success\"}");
+                      } else {
+                        server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+                      }
+                  } });
+
+    server.begin();
 }
