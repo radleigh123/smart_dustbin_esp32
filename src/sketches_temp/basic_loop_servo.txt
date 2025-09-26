@@ -1,0 +1,31 @@
+#include <ESP32Servo.h>
+
+Servo servoMotor;
+
+#define SERVO_PIN 23 // ESP32 pin GPIO26 connected to servo motor
+
+void setup()
+{
+  Serial.begin(115200);
+  servoMotor.attach(SERVO_PIN, 500, 2400);
+}
+
+void loop()
+{
+  // rotates from 0 degrees to 180 degrees
+  for (int pos = 0; pos <= 180; pos += 1)
+  {
+    // in steps of 1 degree
+    servoMotor.write(pos);
+    Serial.println(pos);
+    delay(15); // waits 15ms to reach the position
+  }
+
+  // rotates from 180 degrees to 0 degrees
+  for (int pos = 180; pos >= 0; pos -= 1)
+  {
+    servoMotor.write(pos);
+    Serial.println(pos);
+    delay(15); // waits 15ms to reach the position
+  }
+}
