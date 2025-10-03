@@ -3,7 +3,10 @@
 
 #include <Arduino.h>
 
-void initWifiProvisioning();
+void initWiFi();
+bool connectWiFi(String ssid, String password);
 bool isWifiConnected();
+void checkWiFiConnection();
+String getWiFiStatus();
 
 #endif
