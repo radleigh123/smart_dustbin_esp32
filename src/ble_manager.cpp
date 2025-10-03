@@ -1,234 +1,232 @@
 #include "ble_manager.h"
+#include "wifi_manager.h"
 
-// BLE Objects
-NimBLEServer *pServer = nullptr;
-NimBLEService *pService = nullptr;
-NimBLECharacteristic *pSSIDChar = nullptr;
-NimBLECharacteristic *pPasswordChar = nullptr;
-NimBLECharacteristic *pStatusChar = nullptr;
+// BLE Server and Characteristics
+static NimBLEServer *pServer = nullptr;
+static NimBLECharacteristic *pSSIDCharacteristic = nullptr;
+static NimBLECharacteristic *pPasswordCharacteristic = nullptr;
+static NimBLECharacteristic *pStatusCharacteristic = nullptr;
 
-// Credential storage
-String receivedSSID = "";
-String receivedPassword = "";
-bool credentialsReceived = false;
-bool deviceConnected = false;
+// WiFi Credentials Storage
+static String wifiSSID = "";
+static String wifiPassword = "";
+static bool credentialsReceived = false;
+static bool deviceConnected = false;
 
-// Server callbacks
+/**
+ * Server Callbacks - Handle BLE connection events
+ */
 class ServerCallbacks : public NimBLEServerCallbacks
 {
-    void onConnect(NimBLEServer *pServer)
+    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
         deviceConnected = true;
-        Serial.println("\n[BLE] Client connected!");
+        Serial.println("BLE: Client connected");
+        Serial.printf("BLE: Client address: %s\n", connInfo.getAddress().toString().c_str());
+
+        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
+
+        updateBLEStatus("Connected");
     }
 
-    void onDisconnect(NimBLEServer *pServer)
+    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
         deviceConnected = false;
-        Serial.println("\n[BLE] Client disconnected!");
-        // Restart advertising
+        Serial.println("BLE: Client disconnected");
+        Serial.println("BLE: Restarting advertising...");
         NimBLEDevice::startAdvertising();
-        Serial.println("[BLE] Advertising restarted");
+    }
+
+    void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override
+    {
+        Serial.printf("BLE: MTU updated: %u for connection ID: %u\n", MTU, connInfo.getConnHandle());
     }
 };
 
-// SSID Characteristic Callbacks
-class SSIDCharacteristicCallbacks : public NimBLECharacteristicCallbacks
+/**
+ * Characteristic Callbacks - Handle read/write operations
+ */
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
 {
-    void onWrite(NimBLECharacteristic *pCharacteristic)
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
+        std::string uuid = pCharacteristic->getUUID().toString();
         std::string value = pCharacteristic->getValue();
 
-        Serial.println("\n========================================");
-        Serial.println("[BLE] SSID Characteristic Write Event!");
-        Serial.print("[BLE] Raw length: ");
-        Serial.println(value.length());
-        Serial.print("[BLE] Raw value (hex): ");
-        for (size_t i = 0; i < value.length(); i++)
+        Serial.printf("BLE: Write to %s\n", uuid.c_str());
+
+        // SSID write
+        if (uuid == SSID_CHAR_UUID)
         {
-            Serial.printf("%02X ", (unsigned char)value[i]);
+            wifiSSID = String(value.c_str());
+            Serial.print("BLE: SSID received: ");
+            Serial.println(wifiSSID);
+            updateBLEStatus("SSID received");
         }
-        Serial.println();
-
-        if (value.length() > 0)
+        // Password write
+        else if (uuid == PASS_CHAR_UUID)
         {
-            receivedSSID = String(value.c_str());
-            Serial.print("[BLE] SSID received: '");
-            Serial.print(receivedSSID);
-            Serial.println("'");
-            Serial.println("========================================\n");
+            wifiPassword = String(value.c_str());
+            Serial.println("BLE: Password received");
+            updateBLEStatus("Credentials received");
 
-            // Update status
-            pStatusChar->setValue("SSID received: " + receivedSSID);
-            pStatusChar->notify();
-        }
-        else
-        {
-            Serial.println("[BLE] WARNING: Empty SSID received!");
-            Serial.println("========================================\n");
-        }
-    }
-
-    void onRead(NimBLECharacteristic *pCharacteristic)
-    {
-        Serial.println("[BLE] SSID Read request");
-    }
-};
-
-// Password Characteristic Callbacks
-class PasswordCharacteristicCallbacks : public NimBLECharacteristicCallbacks
-{
-    void onWrite(NimBLECharacteristic *pCharacteristic)
-    {
-        std::string value = pCharacteristic->getValue();
-
-        Serial.println("\n========================================");
-        Serial.println("[BLE] Password Characteristic Write Event!");
-        Serial.print("[BLE] Raw length: ");
-        Serial.println(value.length());
-
-        if (value.length() > 0)
-        {
-            receivedPassword = String(value.c_str());
-            Serial.print("[BLE] Password received: ");
-            // Print masked password
-            for (size_t i = 0; i < receivedPassword.length(); i++)
-            {
-                Serial.print("*");
-            }
-            Serial.println();
-            Serial.println("========================================\n");
-
-            // Mark credentials as complete if both are received
-            if (receivedSSID.length() > 0)
+            if (wifiSSID.length() > 0 && wifiPassword.length() > 0)
             {
                 credentialsReceived = true;
-                Serial.println("\n*** Both credentials received! ***");
-                pStatusChar->setValue("Credentials complete!");
-                pStatusChar->notify();
+                Serial.println("BLE: Complete credentials received - ready to connect");
             }
-            else
-            {
-                pStatusChar->setValue("Password received, need SSID");
-                pStatusChar->notify();
-            }
-        }
-        else
-        {
-            Serial.println("[BLE] WARNING: Empty password received!");
-            Serial.println("========================================\n");
         }
     }
 
-    void onRead(NimBLECharacteristic *pCharacteristic)
+    void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
-        Serial.println("[BLE] Password Read request");
+        Serial.printf("BLE: Read from %s\n", pCharacteristic->getUUID().toString().c_str());
+    }
+
+    void onStatus(NimBLECharacteristic *pCharacteristic, int code) override
+    {
+        Serial.printf("BLE: Notification/Indication status: %d, %s\n",
+                      code, NimBLEUtils::returnCodeToString(code));
+    }
+
+    void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue) override
+    {
+        std::string str = "BLE: Client ID: ";
+        str += std::to_string(connInfo.getConnHandle());
+        str += " Address: ";
+        str += connInfo.getAddress().toString();
+
+        if (subValue == 0)
+        {
+            str += " unsubscribed from ";
+        }
+        else if (subValue == 1)
+        {
+            str += " subscribed to notifications for ";
+        }
+        else if (subValue == 2)
+        {
+            str += " subscribed to indications for ";
+        }
+
+        str += std::string(pCharacteristic->getUUID());
+        Serial.println(str.c_str());
     }
 };
 
+static ServerCallbacks serverCallbacks;
+static CharacteristicCallbacks chrCallbacks;
+
+/**
+ * Initialize BLE Server with WiFi provisioning service
+ */
 void initBLE()
 {
-    Serial.println("\n[BLE] Initializing BLE...");
+    Serial.println("BLE: Initializing...");
 
-    // Initialize NimBLE
     NimBLEDevice::init("SmartDustbin_ESP32");
 
-    // Set power level for better range
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    // Set security (optional - uncomment if you want pairing)
+    // NimBLEDevice::setSecurityAuth(false, false, true);
 
     // Create BLE Server
     pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
+    pServer->setCallbacks(&serverCallbacks);
 
-    // Create BLE Service
-    pService = pServer->createService(SERVICE_UUID);
+    // Create WiFi Provisioning Service (Nordic UART Service UUID)
+    NimBLEService *pService = pServer->createService(SERVICE_UUID);
 
     // Create SSID Characteristic (Write only)
-    pSSIDChar = pService->createCharacteristic(
+    pSSIDCharacteristic = pService->createCharacteristic(
         SSID_CHAR_UUID,
         NIMBLE_PROPERTY::WRITE);
-    pSSIDChar->setCallbacks(new SSIDCharacteristicCallbacks());
+    pSSIDCharacteristic->setCallbacks(&chrCallbacks);
 
     // Create Password Characteristic (Write only)
-    pPasswordChar = pService->createCharacteristic(
+    pPasswordCharacteristic = pService->createCharacteristic(
         PASS_CHAR_UUID,
         NIMBLE_PROPERTY::WRITE);
-    pPasswordChar->setCallbacks(new PasswordCharacteristicCallbacks());
+    pPasswordCharacteristic->setCallbacks(&chrCallbacks);
 
     // Create Status Characteristic (Read + Notify)
-    pStatusChar = pService->createCharacteristic(
+    pStatusCharacteristic = pService->createCharacteristic(
         STATUS_CHAR_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-    pStatusChar->setValue("Waiting for credentials...");
+    pStatusCharacteristic->setValue("Ready for provisioning");
+    pStatusCharacteristic->setCallbacks(&chrCallbacks);
 
     // Start the service
     pService->start();
 
-    // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setName("SmartDustbin_ESP32");
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setMinInterval(0x20); // 40ms
-    pAdvertising->setMaxInterval(0x40); // 100ms
+    pAdvertising->enableScanResponse(true);
+    pAdvertising->start();
 
-    NimBLEDevice::startAdvertising();
-
-    Serial.println("[BLE] BLE Initialization Complete!");
-    Serial.println("[BLE] Device Name: SmartDustbin_ESP32");
-    Serial.println("[BLE] Service UUID: " SERVICE_UUID);
-    Serial.println("[BLE] SSID Char UUID: " SSID_CHAR_UUID);
-    Serial.println("[BLE] Pass Char UUID: " PASS_CHAR_UUID);
-    Serial.println("[BLE] Status Char UUID: " STATUS_CHAR_UUID);
-    Serial.println("[BLE] Advertising started...\n");
+    Serial.println("BLE: Initialized successfully");
+    Serial.println("BLE: Advertising started - Device name: SmartDustbin_ESP32");
+    Serial.println("BLE: Waiting for WiFi credentials...");
 }
 
-bool hasCredentials()
-{
-    bool hasAll = credentialsReceived &&
-                  receivedSSID.length() > 0 &&
-                  receivedPassword.length() > 0;
-
-    if (hasAll)
-    {
-        Serial.println("[BLE] Credentials check: READY");
-        Serial.print("[BLE] SSID: '");
-        Serial.print(receivedSSID);
-        Serial.println("'");
-        Serial.print("[BLE] Password length: ");
-        Serial.println(receivedPassword.length());
-    }
-
-    return hasAll;
-}
-
-String getSSID()
-{
-    return receivedSSID;
-}
-
-String getPassword()
-{
-    return receivedPassword;
-}
-
-void clearCredentials()
-{
-    Serial.println("\n[BLE] Clearing credentials...");
-    receivedSSID = "";
-    receivedPassword = "";
-    credentialsReceived = false;
-    updateBLEStatus("Credentials cleared - ready for new credentials");
-}
-
+/**
+ * Update BLE status characteristic and send notification
+ */
 void updateBLEStatus(const char *status)
 {
-    if (pStatusChar != nullptr)
+    if (pStatusCharacteristic)
     {
-        Serial.print("[BLE] Status update: ");
-        Serial.println(status);
-        pStatusChar->setValue(status);
+        pStatusCharacteristic->setValue(status);
+
+        // Send notification if device is connected
         if (deviceConnected)
         {
-            pStatusChar->notify();
+            pStatusCharacteristic->notify();
         }
+
+        Serial.printf("BLE: Status updated: %s\n", status);
     }
+}
+
+/**
+ * Check if a BLE device is connected
+ */
+bool isDeviceConnected()
+{
+    return deviceConnected;
+}
+
+/**
+ * Get received SSID
+ */
+String getSSID()
+{
+    return wifiSSID;
+}
+
+/**
+ * Get received password
+ */
+String getPassword()
+{
+    return wifiPassword;
+}
+
+/**
+ * Check if complete credentials have been received
+ */
+bool hasCredentials()
+{
+    return credentialsReceived && wifiSSID.length() > 0 && wifiPassword.length() > 0;
+}
+
+/**
+ * Clear stored credentials
+ */
+void clearCredentials()
+{
+    wifiSSID = "";
+    wifiPassword = "";
+    credentialsReceived = false;
+    Serial.println("BLE: Credentials cleared");
 }
