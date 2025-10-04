@@ -1,11 +1,13 @@
 #include "ble_manager.h"
 #include "wifi_manager.h"
+#include <WiFi.h>
 
 // BLE Server and Characteristics
 static NimBLEServer *pServer = nullptr;
 static NimBLECharacteristic *pSSIDCharacteristic = nullptr;
 static NimBLECharacteristic *pPasswordCharacteristic = nullptr;
 static NimBLECharacteristic *pStatusCharacteristic = nullptr;
+static NimBLECharacteristic *pWifiScanCharacteristic = nullptr; // ADD THIS
 
 // WiFi Credentials Storage
 static String wifiSSID = "";
@@ -44,35 +46,59 @@ class ServerCallbacks : public NimBLEServerCallbacks
 };
 
 /**
+ * Scan for WiFi networks and return comma-separated list
+ */
+String scanWifiNetworks()
+{
+    Serial.println("BLE: Starting WiFi scan...");
+
+    int n = WiFi.scanNetworks();
+    String networks = "";
+
+    if (n == 0)
+    {
+        Serial.println("BLE: No networks found");
+        return "No networks found";
+    }
+
+    Serial.printf("BLE: Found %d networks\n", n);
+
+    for (int i = 0; i < n; ++i)
+    {
+        if (i > 0)
+            networks += ",";
+        networks += WiFi.SSID(i);
+        Serial.printf("  %d: %s (%d dBm)\n", i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+    }
+
+    return networks;
+}
+
+/**
  * Characteristic Callbacks - Handle read/write operations
  */
 class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
 {
     void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
-        std::string uuid = pCharacteristic->getUUID().toString();
         std::string value = pCharacteristic->getValue();
 
-        Serial.printf("BLE: Write to %s\n", uuid.c_str());
-
-        // SSID write
-        if (uuid == SSID_CHAR_UUID)
+        if (pCharacteristic->getUUID().equals(NimBLEUUID(SSID_CHAR_UUID)))
         {
             wifiSSID = String(value.c_str());
-            Serial.print("BLE: SSID received: ");
-            Serial.println(wifiSSID);
+            Serial.printf("BLE: SSID received: %s\n", wifiSSID.c_str());
             updateBLEStatus("SSID received");
         }
-        // Password write
-        else if (uuid == PASS_CHAR_UUID)
+        else if (pCharacteristic->getUUID().equals(NimBLEUUID(PASS_CHAR_UUID)))
         {
             wifiPassword = String(value.c_str());
-            Serial.println("BLE: Password received");
+            Serial.println("BLE: Password received (hidden for security)");
             updateBLEStatus("Credentials received");
 
-            if (wifiSSID.length() > 0 && wifiPassword.length() > 0)
+            credentialsReceived = true;
+
+            if (hasCredentials())
             {
-                credentialsReceived = true;
                 Serial.println("BLE: Complete credentials received - ready to connect");
             }
         }
@@ -81,6 +107,14 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
         Serial.printf("BLE: Read from %s\n", pCharacteristic->getUUID().toString().c_str());
+
+        // If WiFi scan characteristic is read, perform scan
+        if (pCharacteristic->getUUID().equals(NimBLEUUID(WIFI_SCAN_CHAR_UUID)))
+        {
+            String networks = scanWifiNetworks();
+            pCharacteristic->setValue(networks.c_str());
+            Serial.printf("BLE: Sent WiFi networks: %s\n", networks.c_str());
+        }
     }
 
     void onStatus(NimBLECharacteristic *pCharacteristic, int code) override
@@ -126,9 +160,6 @@ void initBLE()
 
     NimBLEDevice::init("SmartDustbin_ESP32");
 
-    // Set security (optional - uncomment if you want pairing)
-    // NimBLEDevice::setSecurityAuth(false, false, true);
-
     // Create BLE Server
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
@@ -154,6 +185,13 @@ void initBLE()
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     pStatusCharacteristic->setValue("Ready for provisioning");
     pStatusCharacteristic->setCallbacks(&chrCallbacks);
+
+    // ADD: Create WiFi Scan Characteristic (Read only)
+    pWifiScanCharacteristic = pService->createCharacteristic(
+        WIFI_SCAN_CHAR_UUID,
+        NIMBLE_PROPERTY::READ);
+    pWifiScanCharacteristic->setValue("Scan not started");
+    pWifiScanCharacteristic->setCallbacks(&chrCallbacks);
 
     // Start the service
     pService->start();
