@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include "ble_manager.h"
 #include "wifi_manager.h"
+#include "servo_controller.h"
 
 // State variables
 static bool wifiConnected = false;
@@ -17,6 +18,10 @@ void setup(void)
     Serial.println("\n\n========================================");
     Serial.println("   Smart Dustbin ESP32 - Starting");
     Serial.println("========================================\n");
+
+    // Init Servo
+    initServo();
+    Serial.println("Step 0: Initializing Servo...");
 
     // Init WiFi
     Serial.println("Step 1: Initializing WiFi...");

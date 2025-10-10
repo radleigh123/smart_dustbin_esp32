@@ -10,6 +10,7 @@
 #define PASS_CHAR_UUID "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 #define STATUS_CHAR_UUID "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 #define WIFI_SCAN_CHAR_UUID "6e400005-b5a3-f393-e0a9-e50e24dcca9e"
+#define SERVO_CHAR_UUID "6e400006-b5a3-f393-e0a9-e50e24dcca9e"
 
 // BLE Manager Functions
 void initBLE();

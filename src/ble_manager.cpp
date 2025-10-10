@@ -1,5 +1,6 @@
 #include "ble_manager.h"
 #include "wifi_manager.h"
+#include "servo_controller.h"
 #include <WiFi.h>
 
 // BLE Server and Characteristics
@@ -7,7 +8,8 @@ static NimBLEServer *pServer = nullptr;
 static NimBLECharacteristic *pSSIDCharacteristic = nullptr;
 static NimBLECharacteristic *pPasswordCharacteristic = nullptr;
 static NimBLECharacteristic *pStatusCharacteristic = nullptr;
-static NimBLECharacteristic *pWifiScanCharacteristic = nullptr; // ADD THIS
+static NimBLECharacteristic *pWifiScanCharacteristic = nullptr;
+static NimBLECharacteristic *pServoCharacteristic = nullptr;
 
 // WiFi Credentials Storage
 static String wifiSSID = "";
@@ -102,6 +104,21 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
                 Serial.println("BLE: Complete credentials received - ready to connect");
             }
         }
+        else if (pCharacteristic->getUUID().equals(NimBLEUUID(SERVO_CHAR_UUID)))
+        {
+            int angle = 0;
+            if (value.length() > 0)
+            {
+                angle = atoi(value.c_str());
+                if (angle < 0)
+                    angle = 0;
+                if (angle > 180)
+                    angle = 180;
+                controlServo(angle);
+                Serial.printf("BLE: Servo angle set to %d degrees\n", angle);
+                updateBLEStatus("Servo angle set");
+            }
+        }
     }
 
     void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
@@ -192,6 +209,12 @@ void initBLE()
         NIMBLE_PROPERTY::READ);
     pWifiScanCharacteristic->setValue("Scan not started");
     pWifiScanCharacteristic->setCallbacks(&chrCallbacks);
+
+    // ADD: Create Servo Control Characteristic (Write only)
+    pServoCharacteristic = pService->createCharacteristic(
+        SERVO_CHAR_UUID,
+        NIMBLE_PROPERTY::WRITE);
+    pServoCharacteristic->setCallbacks(&chrCallbacks);
 
     // Start the service
     pService->start();
