@@ -10,7 +10,7 @@
 ║ Ultrasonic Trig  : GPIO 22             ║
 ║ Ultrasonic Echo  : GPIO 23             ║
 ║ -------------------------------------- ║
-║ IR Sensor Pin    : GPIO 27             ║
+║ IR Sensor Pin    : GPIO 18             ║
 ╚════════════════════════════════════════╝*/
 // Servo
 #define SERVO_PIN 26
@@ -20,7 +20,7 @@
 #define ECHO_PIN 23
 
 // IR Sensor
-#define IR_SENSOR_PIN 27
+#define IR_SENSOR_PIN 18
 
 #define DISTANCE_THRESHOLD 10
 
