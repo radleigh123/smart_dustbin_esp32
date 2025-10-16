@@ -10,5 +10,24 @@ void initIRSensor()
 bool isObjectDetected()
 {
     int sensorValue = digitalRead(IR_SENSOR_PIN);
-    return (sensorValue == LOW); // LOW means object detected
+    bool objectDetected = (sensorValue == LOW);
+    static unsigned long detectionStartTime = 0;
+    static bool wasDetected = false;
+    if (objectDetected)
+    {
+        if (!wasDetected)
+        {
+            detectionStartTime = millis();
+            wasDetected = true;
+        }
+        else if (millis() - detectionStartTime >= 500)
+        {
+            return true;
+        }
+    }
+    else
+    {
+        wasDetected = false;
+    }
+    return false;
 }

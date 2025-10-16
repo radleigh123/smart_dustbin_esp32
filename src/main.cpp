@@ -96,17 +96,8 @@ void loop()
         }
     }
 
-    // Here you can add code to read sensors and control the servo
-    // IR
-    if (isObjectDetected())
-    {
-        Serial.println("Object detected by IR sensor!");
-        controlServo(90);
-    }
-    else
-    {
-        controlServo(0);
-    }
+    unsigned long currentMillis = millis();
+    controlLidAuto(currentMillis);
 
     // Small delay to prevent excessive loop iterations
     delay(100);

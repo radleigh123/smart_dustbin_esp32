@@ -1,11 +1,18 @@
 #include <ESP32Servo.h>
 #include "config.h"
 #include "servo_controller.h"
+#include "ir_sensor.h"
 
 Servo myServo;
-int currentAngle = 45;
-unsigned long lastMoveTime = 0;
-const int MOVE_INTERVAL = 30; // Lower = faster, Higher = slower
+
+#define EXE_INTERVAL_1 1000
+#define EXE_INTERVAL_2 3000
+unsigned long lastExecuteMillis1 = 0;
+unsigned long lastExecuteMillis2 = 0;
+
+static bool isLidOpen = false;
+static unsigned long lidOpenTime = 0;
+const unsigned long LID_OPEN_DURATION = 3000; // Time to keep lid open in ms
 
 void initServo()
 {
@@ -33,4 +40,23 @@ void controlServo(float distance)
         myServo.write(currentAngle);
         lastMoveTime = millis();
     } */
+}
+
+void controlLidAuto(unsigned long currentMillis) {
+    if (isObjectDetected()) {
+        // Object detected - open lid if not already open
+        if (!isLidOpen) {
+            int angle = map(90, 0, 100, 0, 180);
+            controlServo(angle);
+            isLidOpen = true;
+            lidOpenTime = currentMillis;
+            Serial.println("Opening lid");
+        }
+    } else if (isLidOpen && (currentMillis - lidOpenTime >= LID_OPEN_DURATION)) {
+        // No object detected and lid has been open for duration - close it
+        int angle = map(25, 0, 100, 0, 180);
+        controlServo(angle);
+        isLidOpen = false;
+        Serial.println("Closing lid");
+    }
 }

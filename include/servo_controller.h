@@ -5,5 +5,6 @@
 
 void initServo();
 void controlServo(float distance);
+void controlLidAuto(unsigned long currentMillis);
 
 #endif
