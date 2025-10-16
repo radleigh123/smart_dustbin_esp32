@@ -4,6 +4,6 @@
 #include <Arduino.h>
 
 void initUltrasonicSensor();
-float getDistance();
+float getDistance(unsigned long currentMillis);
 
 #endif
