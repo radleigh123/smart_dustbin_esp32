@@ -3,6 +3,7 @@
 #include "ble_manager.h"
 #include "wifi_manager.h"
 #include "servo_controller.h"
+#include "ir_sensor.h"
 
 // State variables
 static bool wifiConnected = false;
@@ -19,9 +20,10 @@ void setup(void)
     Serial.println("   Smart Dustbin ESP32 - Starting");
     Serial.println("========================================\n");
 
-    // Init Servo
+    // Init Servo, IR Sensor, Ultrasonic Sensor
+    initIRSensor();
     initServo();
-    Serial.println("Step 0: Initializing Servo...");
+    Serial.println("Step 0: Initializing Servo, IR Sensor, and Ultrasonic Sensor...");
 
     // Init WiFi
     Serial.println("Step 1: Initializing WiFi...");
@@ -92,6 +94,18 @@ void loop()
             Serial.print("WiFi Status: ");
             Serial.println(getWiFiStatus());
         }
+    }
+
+    // Here you can add code to read sensors and control the servo
+    // IR
+    if (isObjectDetected())
+    {
+        Serial.println("Object detected by IR sensor!");
+        controlServo(90);
+    }
+    else
+    {
+        controlServo(0);
     }
 
     // Small delay to prevent excessive loop iterations
