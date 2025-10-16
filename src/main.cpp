@@ -89,8 +89,8 @@ void loop()
         else
         {
             // Optional: Print status periodically
-            // Serial.print("WiFi Status: ");
-            // Serial.println(getWiFiStatus());
+            Serial.print("WiFi Status: ");
+            Serial.println(getWiFiStatus());
         }
     }
 
