@@ -16,6 +16,11 @@ static bool provisioningComplete = false;
 static unsigned long lastWiFiCheck = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 10000;
 
+static String ssid = "";
+static String password = "";
+static String userUID = "";
+static String binID = "";
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -29,27 +34,68 @@ void setup(void)
     initServo();
     initIRSensor();
     initUltrasonicSensor();
-    Serial.println("Step 0: Initializing Servo, IR Sensor, and Ultrasonic Sensor...");
+    Serial.println("\n========================================");
+    Serial.println("   Initializing Servo, IR Sensor, and Ultrasonic Sensor...");
+    Serial.println("========================================");
 
     // Init WiFi
-    Serial.println("Step 1: Initializing WiFi and Firebase...");
-    initWiFi();
-    initFirebase();
-
-    Serial.println("Step 2: Initializing BLE provisioning...");
-    initBLE();
-
     Serial.println("\n========================================");
-    Serial.println("System ready!");
+    Serial.println("   Initializing WiFi");
     Serial.println("========================================");
-    Serial.println("Use NRF Connect app to provision WiFi");
-    Serial.println("Device name: SmartDustbin_ESP32");
-    Serial.println("========================================\n");
+    initWiFi();
+
+    static String *savedPrefs = getPreferences();
+    ssid = savedPrefs[0];
+    password = savedPrefs[1];
+    userUID = savedPrefs[2];
+    binID = savedPrefs[3];
+
+    if (ssid.length() > 0 && password.length() > 0 && userUID.length() > 0 && binID.length() > 0)
+    {
+        wifiConnected = connectWiFi(ssid, password);
+
+        if (wifiConnected)
+        {
+            Serial.println("Saved WiFi Connected Successfully!");
+            updateBLEStatus("WiFi Connected!");
+
+            // Init Firebase
+            Serial.println("\n========================================");
+            Serial.println("   Initializing Firebase");
+            Serial.println("========================================");
+            while (WiFi.status() != WL_CONNECTED)
+                delay(500);
+            delay(2000);
+            initFirebase();
+            provisioningComplete = true;
+
+            // Set Firebase path
+            firebaseSetPath(userUID + "/" + binID);
+        }
+        else
+        {
+            Serial.println("Saved WiFi Connection Failed!");
+            updateBLEStatus("Saved WiFi re-provisioning needed");
+        }
+    }
+
+    if (!(wifiConnected && provisioningComplete))
+    {
+        Serial.println("Initialize BLE for re-provisioning...");
+        initBLE();
+        Serial.println("\n========================================");
+        Serial.println("System ready!");
+        Serial.println("========================================");
+        Serial.println("Use NRF Connect app to provision WiFi");
+        Serial.println("Device name: SmartDustbin_ESP32");
+        Serial.println("========================================\n");
+    }
 }
 
 void loop()
 {
     unsigned long currentMillis = millis();
+    firebaseLoop();
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
@@ -72,8 +118,19 @@ void loop()
                 updateBLEStatus("WiFi Connected!");
                 provisioningComplete = true;
 
-                // Optional: Clear credentials from memory for security
-                // clearCredentials();
+                Serial.println("\n========================================");
+                Serial.println("   Initializing Firebase");
+                Serial.println("========================================");
+                while (WiFi.status() != WL_CONNECTED)
+                    delay(500);
+                delay(2000);
+                initFirebase();
+
+                // Set Firebase path
+                firebaseSetPath(getUserUID() + "/" + getBinID());
+
+                // Saving to NVS
+                setPreferences(getSSID(), getPassword(), getUserUID(), getBinID());
             }
             else
             {
@@ -109,8 +166,6 @@ void loop()
 
         if (wifiConnected)
         {
-            firebaseLoop();
-
             if (firebaseReady())
             {
                 static unsigned long lastSendMillis = 0;
@@ -120,7 +175,6 @@ void loop()
                     lastSendMillis = currentMillis;
                     float distance = getDistance(currentMillis);
                     firebaseUpdateUltrasonicData(distance);
-                    Serial.printf("Distance: %.2f cm\n", distance);
                 }
             }
         }

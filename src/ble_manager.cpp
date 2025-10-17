@@ -10,12 +10,17 @@ static NimBLECharacteristic *pPasswordCharacteristic = nullptr;
 static NimBLECharacteristic *pStatusCharacteristic = nullptr;
 static NimBLECharacteristic *pWifiScanCharacteristic = nullptr;
 static NimBLECharacteristic *pServoCharacteristic = nullptr;
+static NimBLECharacteristic *pUserUIDCharacteristic = nullptr;
+static NimBLECharacteristic *pBinIDCharacteristic = nullptr;
 
 // WiFi Credentials Storage
 static String wifiSSID = "";
 static String wifiPassword = "";
 static bool credentialsReceived = false;
 static bool deviceConnected = false;
+
+static String userUID = "";
+static String binID = "";
 
 /**
  * Server Callbacks - Handle BLE connection events
@@ -119,6 +124,18 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
                 updateBLEStatus("Servo angle set");
             }
         }
+        else if (pCharacteristic->getUUID().equals(NimBLEUUID(USERUID_CHAR_UUID)))
+        {
+            userUID = String(value.c_str());
+            Serial.printf("BLE: User UID received: %s\n", userUID.c_str());
+            updateBLEStatus("User UID received");
+        }
+        else if (pCharacteristic->getUUID().equals(NimBLEUUID(BINID_CHAR_UUID)))
+        {
+            binID = String(value.c_str());
+            Serial.printf("BLE: Bin ID received: %s\n", binID.c_str());
+            updateBLEStatus("Bin ID received");
+        }
     }
 
     void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
@@ -216,6 +233,18 @@ void initBLE()
         NIMBLE_PROPERTY::WRITE);
     pServoCharacteristic->setCallbacks(&chrCallbacks);
 
+    // ADD: Create User UID Characteristic (Write only)
+    pUserUIDCharacteristic = pService->createCharacteristic(
+        USERUID_CHAR_UUID,
+        NIMBLE_PROPERTY::WRITE);
+    pUserUIDCharacteristic->setCallbacks(&chrCallbacks);
+
+    // ADD: Create Bin ID Characteristic (Write only)
+    pBinIDCharacteristic = pService->createCharacteristic(
+        BINID_CHAR_UUID,
+        NIMBLE_PROPERTY::WRITE);
+    pBinIDCharacteristic->setCallbacks(&chrCallbacks);
+
     // Start the service
     pService->start();
 
@@ -271,6 +300,22 @@ String getSSID()
 String getPassword()
 {
     return wifiPassword;
+}
+
+/**
+ * Get received User UID
+ */
+String getUserUID()
+{
+    return userUID;
+}
+
+/**
+ * Get received Bin ID
+ */
+String getBinID()
+{
+    return binID;
 }
 
 /**

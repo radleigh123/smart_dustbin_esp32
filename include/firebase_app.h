@@ -12,7 +12,7 @@ void initFirebase();
 void firebaseLoop();
 bool firebaseReady();
 void firebaseUpdateUltrasonicData(float distance);
-void firebaseSetBinIdPath(const String &id);
+void firebaseSetPath(const String &id);
 void processData(AsyncResult &result);
 
 #endif // FIREBASE_APP_H

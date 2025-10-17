@@ -31,8 +31,7 @@ float getDistance(unsigned long currentMillis)
     {
         lastDistance = measureDistance();
         lastReadTime = currentMillis;
-        Serial.print("Ultrasonic Sensor Distance: ");
-        Serial.println(lastDistance);
+        Serial.printf("Ultrasonic Sensor Distance: %.2f cm\n", lastDistance);
     }
     return lastDistance;
 }

@@ -42,7 +42,7 @@ void firebaseUpdateUltrasonicData(float distance)
     Database.set<int>(client, binId + "distance", data, processData, "📝 RTDB_SET_DISTANCE_TASK");
 }
 
-void firebaseSetBinIdPath(const String &id)
+void firebaseSetPath(const String &id)
 {
     binId = "trash_bins/" + id + "/";
 }
