@@ -5,6 +5,8 @@
 void initIRSensor()
 {
     pinMode(IR_SENSOR_PIN, INPUT);
+    pinMode(LED_PIN_GREEN, OUTPUT);
+    pinMode(LED_PIN_RED, OUTPUT);
 }
 
 bool isObjectDetected()
@@ -20,7 +22,7 @@ bool isObjectDetected()
             detectionStartTime = millis();
             wasDetected = true;
         }
-        else if (millis() - detectionStartTime >= 500)
+        else if (millis() - detectionStartTime >= 300)
         {
             return true;
         }

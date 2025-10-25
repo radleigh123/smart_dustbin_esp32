@@ -22,6 +22,10 @@
 // IR Sensor
 #define IR_SENSOR_PIN 18
 
+// LED Pin
+#define LED_PIN_GREEN 17
+#define LED_PIN_RED 19
+
 #define DISTANCE_THRESHOLD 10
 
 // Firebase Project Configuration

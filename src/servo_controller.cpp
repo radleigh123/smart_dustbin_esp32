@@ -1,4 +1,5 @@
 #include <ESP32Servo.h>
+#include <Arduino.h>
 #include "config.h"
 #include "servo_controller.h"
 #include "ir_sensor.h"
@@ -46,17 +47,21 @@ void controlLidAuto(unsigned long currentMillis) {
     if (isObjectDetected()) {
         // Object detected - open lid if not already open
         if (!isLidOpen) {
-            int angle = map(90, 0, 100, 0, 180);
+            int angle = map(0, 0, 100, 0, 180);
             controlServo(angle);
             isLidOpen = true;
             lidOpenTime = currentMillis;
+            digitalWrite(LED_PIN_GREEN, HIGH);
+            digitalWrite(LED_PIN_RED, LOW);
             Serial.println("Opening lid");
         }
     } else if (isLidOpen && (currentMillis - lidOpenTime >= LID_OPEN_DURATION)) {
         // No object detected and lid has been open for duration - close it
-        int angle = map(25, 0, 100, 0, 180);
+        int angle = map(90, 0, 100, 0, 180);
         controlServo(angle);
         isLidOpen = false;
+        digitalWrite(LED_PIN_GREEN, LOW);
+        digitalWrite(LED_PIN_RED, HIGH);
         Serial.println("Closing lid");
     }
 }
