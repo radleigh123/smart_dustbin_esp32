@@ -11,6 +11,8 @@
 void initFirebase();
 void firebaseLoop();
 bool firebaseReady();
+void firebaseSetData(const String &binName, const String &binLocation);
+void firebaseUpdateFillLevel(float distance);
 void firebaseUpdateUltrasonicData(float distance);
 void firebaseSetPath(const String &id);
 void processData(AsyncResult &result);

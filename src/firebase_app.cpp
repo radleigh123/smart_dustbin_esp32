@@ -36,6 +36,60 @@ bool firebaseReady()
     return app.ready();
 }
 
+/**
+ * Set initial data in Firebase Realtime Database
+ * Status<int>: 0 - Empty, 1 - Normal, 2 - Full
+ * Name<string>: Bin name
+ * Location<string>: Bin location
+ * Fill Level<int>: Percentage of fill level
+ */
+void firebaseSetData(const String &binName, const String &binLocation)
+{
+    const String name = binName.length() > 0 ? binName : "Smart Dustbin 01";
+    const String location = binLocation.length() > 0 ? binLocation : "Building A - Lobby";
+
+    Database.set<int>(client, binId + "status", 0, processData, "📝 RTDB_SET_STATUS_TASK");
+    Database.set<String>(client, binId + "name", name, processData, "📝 RTDB_SET_NAME_TASK");
+    Database.set<String>(client, binId + "location", location, processData, "📝 RTDB_SET_LOCATION_TASK");
+    Database.set<int>(client, binId + "fillLevel", 0, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
+    Database.set<int>(client, binId + "distance", 0, processData, "📝 RTDB_SET_DISTANCE_TASK");
+}
+
+/**
+ * Calculate fill_level based on distance and update in Firebase
+ */
+void firebaseUpdateFillLevel(float distance)
+{
+    int fillLevel = 0;
+    int maxDistance = 25; // In cm
+    if (distance >= maxDistance)
+    {
+        fillLevel = 0; // Empty
+    }
+    else if (distance <= 0.0)
+    {
+        fillLevel = 100; // Full
+    }
+    else
+    {
+        fillLevel = static_cast<int>(((maxDistance - distance) / maxDistance) * 100);
+    }
+    /* if (distance >= 35)
+    {
+        fillLevel = 0; // Empty
+    }
+    else if (distance <= 0.0)
+    {
+        fillLevel = 100; // Full
+    }
+    else
+    {
+        fillLevel = static_cast<int>(((100.0 - distance) / 100.0) * 100);
+    } */
+
+    Database.set<int>(client, binId + "fillLevel", fillLevel, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
+}
+
 void firebaseUpdateUltrasonicData(float distance)
 {
     int data = static_cast<int>(distance);

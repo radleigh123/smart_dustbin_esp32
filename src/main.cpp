@@ -71,6 +71,7 @@ void setup(void)
 
             // Set Firebase path
             firebaseSetPath(userUID + "/" + binID);
+            firebaseSetData("", "");
         }
         else
         {
@@ -128,6 +129,7 @@ void loop()
 
                 // Set Firebase path
                 firebaseSetPath(getUserUID() + "/" + getBinID());
+                firebaseSetData("", "");
 
                 // Saving to NVS
                 setPreferences(getSSID(), getPassword(), getUserUID(), getBinID());
@@ -175,6 +177,7 @@ void loop()
                     lastSendMillis = currentMillis;
                     float distance = getDistance(currentMillis);
                     firebaseUpdateUltrasonicData(distance);
+                    firebaseUpdateFillLevel(distance);
                 }
             }
         }
