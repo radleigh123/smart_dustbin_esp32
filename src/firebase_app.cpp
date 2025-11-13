@@ -7,6 +7,11 @@ WiFiClientSecure ssl_client;
 using AsyncClient = AsyncClientClass;
 AsyncClient client(ssl_client);
 RealtimeDatabase Database;
+AsyncResult dbResult;
+
+// Cached variables for updating device modes
+String cachedMode = "auto"; // default AUTO mode
+String cachedCommand = "";  // manual open/close
 
 String binId = "trash_bins/";
 
@@ -22,8 +27,9 @@ void initFirebase()
     app.getApp<RealtimeDatabase>(Database);
     Database.url(FIREBASE_HOST);
     delay(1000);
+
+    // Listen for realtime changes, continue to firebaseSetPath, subscribe
     Database.setSSEFilters();
-    Database.get(client, "/test/data", processData, true, "🧾 RTDB_GET_TASK");
 }
 
 void firebaseLoop()
@@ -48,7 +54,7 @@ void firebaseSetData(const String &binName, const String &binLocation)
     const String name = binName.length() > 0 ? binName : "Smart Dustbin 01";
     const String location = binLocation.length() > 0 ? binLocation : "Building A - Lobby";
 
-    Database.set<int>(client, binId + "status", 0, processData, "📝 RTDB_SET_STATUS_TASK");
+    Database.set<String>(client, binId + "status", "auto", processData, "📝 RTDB_SET_STATUS_TASK");
     Database.set<String>(client, binId + "name", name, processData, "📝 RTDB_SET_NAME_TASK");
     Database.set<String>(client, binId + "location", location, processData, "📝 RTDB_SET_LOCATION_TASK");
     Database.set<int>(client, binId + "fillLevel", 0, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
@@ -74,18 +80,6 @@ void firebaseUpdateFillLevel(float distance)
     {
         fillLevel = static_cast<int>(((maxDistance - distance) / maxDistance) * 100);
     }
-    /* if (distance >= 35)
-    {
-        fillLevel = 0; // Empty
-    }
-    else if (distance <= 0.0)
-    {
-        fillLevel = 100; // Full
-    }
-    else
-    {
-        fillLevel = static_cast<int>(((100.0 - distance) / 100.0) * 100);
-    } */
 
     Database.set<int>(client, binId + "fillLevel", fillLevel, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
 }
@@ -99,6 +93,7 @@ void firebaseUpdateUltrasonicData(float distance)
 void firebaseSetPath(const String &id)
 {
     binId = "trash_bins/" + id + "/";
+    Database.get(client, binId, processData, true, "🧾 RTDB_SUBSCRIBE_TASK");
 }
 
 void processData(AsyncResult &result)
@@ -116,5 +111,35 @@ void processData(AsyncResult &result)
         Firebase.printf("Error task: %s, msg: %s, code: %d\n", result.uid().c_str(), result.error().message().c_str(), result.error().code());
 
     if (result.available())
+    {
         Firebase.printf("task: %s, payload: %s\n", result.uid().c_str(), result.c_str());
+        String payload = result.c_str();
+        String path = result.path();
+
+        Serial.printf("Path: %s, Payload: %s\n", path.c_str(), payload.c_str());
+
+        // MODE CHANGED
+        if (path.endsWith("/status"))
+        {
+            cachedMode = payload;
+            Serial.printf("Updated cachedMode = %s\n", cachedMode);
+        }
+
+        // MANUAL COMMAND CHANGED
+        if (path.endsWith("/command"))
+        {
+            cachedCommand = payload;
+            Serial.printf("Updated cachedCommand = %s\n", cachedCommand);
+        }
+    }
+}
+
+String getCachedMode()
+{
+    return cachedMode;
+}
+
+String getCachedCommand()
+{
+    return cachedCommand;
 }

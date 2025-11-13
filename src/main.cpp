@@ -6,6 +6,7 @@
 #include "ir_sensor.h"
 #include "ultrasonic_sensor.h"
 #include "firebase_app.h"
+#include "mode_manager.h"
 
 // State variables
 static unsigned long lastMainLoopMillis = 0;
@@ -97,6 +98,7 @@ void loop()
 {
     unsigned long currentMillis = millis();
     firebaseLoop();
+    managerLoop(currentMillis); // TODO: CONTINUE, NOT FUNCTIONING or CALLING
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
@@ -183,5 +185,5 @@ void loop()
         }
     }
 
-    controlLidAuto(currentMillis);
+    // controlLidAuto(currentMillis);
 }
