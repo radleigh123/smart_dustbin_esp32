@@ -6,7 +6,6 @@
 #include "ir_sensor.h"
 #include "ultrasonic_sensor.h"
 #include "firebase_app.h"
-#include "mode_manager.h"
 
 // State variables
 static unsigned long lastMainLoopMillis = 0;
@@ -68,11 +67,19 @@ void setup(void)
                 delay(500);
             delay(2000);
             initFirebase();
+
+            // This ensures subscription runs only after Firebase is ready
+            while (!firebaseReady())
+            {
+                firebaseLoop();
+                delay(10);
+            }
+
             provisioningComplete = true;
 
-            // Set Firebase path
+            // SUBSCRIBE
             firebaseSetPath(userUID + "/" + binID);
-            firebaseSetData("", "");
+            delay(1200);
         }
         else
         {
@@ -98,7 +105,6 @@ void loop()
 {
     unsigned long currentMillis = millis();
     firebaseLoop();
-    managerLoop(currentMillis); // TODO: CONTINUE, NOT FUNCTIONING or CALLING
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
@@ -160,12 +166,6 @@ void loop()
                 provisioningComplete = false;
                 updateBLEStatus("WiFi disconnected");
             }
-            else
-            {
-                // Optional: Print status periodically
-                Serial.print("WiFi Status: ");
-                Serial.println(getWiFiStatus());
-            }
         }
 
         if (wifiConnected)
@@ -184,6 +184,5 @@ void loop()
             }
         }
     }
-
-    // controlLidAuto(currentMillis);
+    controlLidAuto(currentMillis);
 }

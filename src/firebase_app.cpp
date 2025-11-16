@@ -7,11 +7,6 @@ WiFiClientSecure ssl_client;
 using AsyncClient = AsyncClientClass;
 AsyncClient client(ssl_client);
 RealtimeDatabase Database;
-AsyncResult dbResult;
-
-// Cached variables for updating device modes
-String cachedMode = "auto"; // default AUTO mode
-String cachedCommand = "";  // manual open/close
 
 String binId = "trash_bins/";
 
@@ -54,11 +49,12 @@ void firebaseSetData(const String &binName, const String &binLocation)
     const String name = binName.length() > 0 ? binName : "Smart Dustbin 01";
     const String location = binLocation.length() > 0 ? binLocation : "Building A - Lobby";
 
-    Database.set<String>(client, binId + "status", "auto", processData, "📝 RTDB_SET_STATUS_TASK");
-    Database.set<String>(client, binId + "name", name, processData, "📝 RTDB_SET_NAME_TASK");
-    Database.set<String>(client, binId + "location", location, processData, "📝 RTDB_SET_LOCATION_TASK");
-    Database.set<int>(client, binId + "fillLevel", 0, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
-    Database.set<int>(client, binId + "distance", 0, processData, "📝 RTDB_SET_DISTANCE_TASK");
+    Database.set<String>(client, binId + "status", "auto", processData, "INIT_STATUS");
+    Database.set<String>(client, binId + "command", "open", processData, "INIT_COMMAND");
+    Database.set<String>(client, binId + "name", name, processData, "INIT_BIN_NAME");
+    Database.set<String>(client, binId + "location", location, processData, "INIT_BIN_LOCATION");
+    Database.set<int>(client, binId + "fillLevel", 0, processData, "INIT_FILL_LEVEL");
+    Database.set<int>(client, binId + "distance", 0, processData, "INIT_DISTANCE");
 }
 
 /**
@@ -81,19 +77,21 @@ void firebaseUpdateFillLevel(float distance)
         fillLevel = static_cast<int>(((maxDistance - distance) / maxDistance) * 100);
     }
 
-    Database.set<int>(client, binId + "fillLevel", fillLevel, processData, "📝 RTDB_SET_FILL_LEVEL_TASK");
+    Database.set<int>(client, binId + "fillLevel", fillLevel, processData, "SET_FILL_LEVEL");
 }
 
 void firebaseUpdateUltrasonicData(float distance)
 {
     int data = static_cast<int>(distance);
-    Database.set<int>(client, binId + "distance", data, processData, "📝 RTDB_SET_DISTANCE_TASK");
+    Database.set<int>(client, binId + "distance", data, processData, "SET_DISTANCE");
 }
 
 void firebaseSetPath(const String &id)
 {
     binId = "trash_bins/" + id + "/";
-    Database.get(client, binId, processData, true, "🧾 RTDB_SUBSCRIBE_TASK");
+
+    Serial.println("Subscribing to RTDB...");
+    Database.get(client, binId, processData, true, "SUB_STATUS");
 }
 
 void processData(AsyncResult &result)
@@ -110,36 +108,12 @@ void processData(AsyncResult &result)
     if (result.isError())
         Firebase.printf("Error task: %s, msg: %s, code: %d\n", result.uid().c_str(), result.error().message().c_str(), result.error().code());
 
-    if (result.available())
-    {
-        Firebase.printf("task: %s, payload: %s\n", result.uid().c_str(), result.c_str());
-        String payload = result.c_str();
-        String path = result.path();
+    if (!result.available())
+        return;
 
-        Serial.printf("Path: %s, Payload: %s\n", path.c_str(), payload.c_str());
+    Firebase.printf("task: %s, payload: %s\n", result.uid().c_str(), result.c_str());
+    String payload = result.c_str();
+    String path = result.path();
 
-        // MODE CHANGED
-        if (path.endsWith("/status"))
-        {
-            cachedMode = payload;
-            Serial.printf("Updated cachedMode = %s\n", cachedMode);
-        }
-
-        // MANUAL COMMAND CHANGED
-        if (path.endsWith("/command"))
-        {
-            cachedCommand = payload;
-            Serial.printf("Updated cachedCommand = %s\n", cachedCommand);
-        }
-    }
-}
-
-String getCachedMode()
-{
-    return cachedMode;
-}
-
-String getCachedCommand()
-{
-    return cachedCommand;
+    Serial.printf("Path: %s\nPayload: %s\n", path.c_str(), payload.c_str());
 }

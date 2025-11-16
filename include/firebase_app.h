@@ -17,7 +17,4 @@ void firebaseUpdateUltrasonicData(float distance);
 void firebaseSetPath(const String &id);
 void processData(AsyncResult &result);
 
-String getCachedMode();
-String getCachedCommand();
-
 #endif // FIREBASE_APP_H
