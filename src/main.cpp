@@ -21,6 +21,8 @@ static String password = "";
 static String userUID = "";
 static String binID = "";
 
+String currentCmd = "";
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -66,7 +68,7 @@ void setup(void)
             while (WiFi.status() != WL_CONNECTED)
                 delay(500);
             delay(2000);
-            initFirebase();
+            initFirebase("/trash_bins/" + userUID + "/" + binID + "/");
 
             // This ensures subscription runs only after Firebase is ready
             while (!firebaseReady())
@@ -77,9 +79,8 @@ void setup(void)
 
             provisioningComplete = true;
 
-            // SUBSCRIBE
             firebaseSetPath(userUID + "/" + binID);
-            delay(1200);
+            firebaseSetData("", "");
         }
         else
         {
@@ -105,6 +106,20 @@ void loop()
 {
     unsigned long currentMillis = millis();
     firebaseLoop();
+
+    // Servo mode: AUTO | MANUAL
+    currentCmd = getCommand();
+    if (currentCmd == "auto")
+    {
+        controlLidAuto(currentMillis);
+    }
+    else
+    {
+        if (currentCmd == "open")
+            openLid();
+        else
+            closeLid();
+    }
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
@@ -133,7 +148,7 @@ void loop()
                 while (WiFi.status() != WL_CONNECTED)
                     delay(500);
                 delay(2000);
-                initFirebase();
+                initFirebase("/trash_bins/" + getUserUID() + "/" + getBinID() + "/");
 
                 // Set Firebase path
                 firebaseSetPath(getUserUID() + "/" + getBinID());
@@ -170,6 +185,10 @@ void loop()
 
         if (wifiConnected)
         {
+            // Stops ultrasonic from updating the distance if lid is open
+            if (currentCmd == "open")
+                return;
+
             if (firebaseReady())
             {
                 static unsigned long lastSendMillis = 0;
@@ -179,10 +198,8 @@ void loop()
                     lastSendMillis = currentMillis;
                     float distance = getDistance(currentMillis);
                     firebaseUpdateUltrasonicData(distance);
-                    firebaseUpdateFillLevel(distance);
                 }
             }
         }
     }
-    controlLidAuto(currentMillis);
 }

@@ -33,7 +33,7 @@ void openLid()
     lidOpenTime = millis();
     digitalWrite(LED_PIN_GREEN, HIGH);
     digitalWrite(LED_PIN_RED, LOW);
-    Serial.println("Lid opened");
+    // Serial.println("Lid opened");
 }
 
 void closeLid()
@@ -42,7 +42,7 @@ void closeLid()
     isLidOpen = false;
     digitalWrite(LED_PIN_GREEN, LOW);
     digitalWrite(LED_PIN_RED, HIGH);
-    Serial.println("Lid closed");
+    // Serial.println("Lid closed");
 }
 
 void controlServo(float distance)
