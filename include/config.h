@@ -29,9 +29,10 @@
 #define DISTANCE_THRESHOLD 10
 
 // Firebase Project Configuration
-#define WEB_API_KEY "AIzaSyAjVoD7YONx-VOaE_Ls8g8difj7a7_xlXI"
+// #define WEB_API_KEY "AIzaSyAjVoD7YONx-VOaE_Ls8g8difj7a7_xlXI"
+#define WEB_API_KEY "AIzaSyARZOk3C4nFRlT65bX6MlMv6z4bOznj978"
 #define FIREBASE_HOST "https://smart-dustbin-43323-default-rtdb.asia-southeast1.firebasedatabase.app/"
-#define USER_EMAIL "admin@admin.com"
+#define USER_EMAIL "keaneradleigh123@gmail.com"
 #define USER_PASS "123456"
 
 #endif

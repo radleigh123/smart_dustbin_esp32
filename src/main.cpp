@@ -12,9 +12,15 @@ static unsigned long lastMainLoopMillis = 0;
 const unsigned long MAIN_LOOP_INTERVAL = 100; // 100ms interval
 
 static bool wifiConnected = false;
+// Prevents loop on initializing firebase
 static bool provisioningComplete = false;
 static unsigned long lastWiFiCheck = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 10000;
+
+// Prevents loop on initializing firebase data
+static bool initFirebaseRTDB = false;
+
+static String *savedPrefs;
 
 static String ssid = "";
 static String password = "";
@@ -28,25 +34,34 @@ void setup(void)
     Serial.begin(115200);
     delay(1000);
 
-    Serial.println("\n\n========================================");
-    Serial.println("   Smart Dustbin ESP32 - Starting");
-    Serial.println("========================================\n");
+    Serial.println("\n");
+    Serial.println("    ╔═══════════════════════════════════════════════════╗");
+    Serial.println("    ║           Smart Dustbin ESP32 - Starting          ║");
+    Serial.println("    ╚═══════════════════════════════════════════════════╝");
+    Serial.println("\n");
 
     // Init Servo, IR Sensor, Ultrasonic Sensor
     initServo();
     initIRSensor();
     initUltrasonicSensor();
-    Serial.println("\n========================================");
-    Serial.println("   Initializing Servo, IR Sensor, and Ultrasonic Sensor...");
-    Serial.println("========================================");
+    Serial.println("\n");
+    Serial.println("    ╔═══════════════════════════════════════════════════╗");
+    Serial.println("    ║  Initializing the following:                      ║");
+    Serial.println("    ║     + Servo module...                             ║");
+    Serial.println("    ║     + IR Sensor module...                         ║");
+    Serial.println("    ║     + Ultrasonic Sensor module...                 ║");
+    Serial.println("    ╚═══════════════════════════════════════════════════╝");
+    Serial.println("\n");
 
     // Init WiFi
-    Serial.println("\n========================================");
-    Serial.println("   Initializing WiFi");
-    Serial.println("========================================");
+    Serial.println("\n");
+    Serial.println("    ╔═══════════════════════════════════════════════════╗");
+    Serial.println("    ║                 Initializing WiFi...              ║");
+    Serial.println("    ╚═══════════════════════════════════════════════════╝");
+    Serial.println("\n");
     initWiFi();
 
-    static String *savedPrefs = getPreferences();
+    savedPrefs = getPreferences();
     ssid = savedPrefs[0];
     password = savedPrefs[1];
     userUID = savedPrefs[2];
@@ -62,13 +77,15 @@ void setup(void)
             updateBLEStatus("WiFi Connected!");
 
             // Init Firebase
-            Serial.println("\n========================================");
-            Serial.println("   Initializing Firebase");
-            Serial.println("========================================");
+            Serial.println("\n");
+            Serial.println("    ╔═══════════════════════════════════════════════════╗");
+            Serial.println("    ║               Initializing Firebase...            ║");
+            Serial.println("    ╚═══════════════════════════════════════════════════╝");
+            Serial.println("\n");
             while (WiFi.status() != WL_CONNECTED)
                 delay(500);
             delay(2000);
-            initFirebase("/trash_bins/" + userUID + "/" + binID + "/");
+            initFirebase("trash_bins/" + userUID + "/" + binID + "/");
 
             // This ensures subscription runs only after Firebase is ready
             while (!firebaseReady())
@@ -80,7 +97,7 @@ void setup(void)
             provisioningComplete = true;
 
             firebaseSetPath(userUID + "/" + binID);
-            firebaseSetData("", "");
+            // firebaseSetData("", "");
         }
         else
         {
@@ -91,14 +108,15 @@ void setup(void)
 
     if (!(wifiConnected && provisioningComplete))
     {
-        Serial.println("Initialize BLE for re-provisioning...");
         initBLE();
-        Serial.println("\n========================================");
-        Serial.println("System ready!");
-        Serial.println("========================================");
-        Serial.println("Use NRF Connect app to provision WiFi");
-        Serial.println("Device name: SmartDustbin_ESP32");
-        Serial.println("========================================\n");
+        Serial.println("\n");
+        Serial.println("    ╔═══════════════════════════════════════════════════╗");
+        Serial.println("    ║        Initialize BLE for re-provisioning...      ║");
+        Serial.println("    ╠═══════════════════════════════════════════════════╣");
+        Serial.println("    ║        Use NRF Connect app to provision WiFi      ║");
+        Serial.println("    ║           Device name: SmartDustbin_ESP32         ║");
+        Serial.println("    ╚═══════════════════════════════════════════════════╝");
+        Serial.println("\n");
     }
 }
 
@@ -107,7 +125,7 @@ void loop()
     unsigned long currentMillis = millis();
     firebaseLoop();
 
-    // Servo mode: AUTO | MANUAL
+    // Servo mode: AUTO (default) | MANUAL
     currentCmd = getCommand();
     if (currentCmd == "auto")
     {
@@ -125,37 +143,41 @@ void loop()
     {
         if (hasCredentials() && !provisioningComplete)
         {
-            Serial.println("\n----------------------------------------");
+            Serial.println("\n========================================");
             Serial.println("WiFi credentials received!");
-            Serial.println("Attempting to connect to WiFi...");
-            Serial.println("----------------------------------------");
-
             updateBLEStatus("Connecting to WiFi...");
-
             wifiConnected = connectWiFi(getSSID(), getPassword());
+            Serial.println("========================================");
 
             if (wifiConnected)
             {
-                Serial.println("\n✓ WiFi Connected Successfully!");
-                Serial.print("✓ IP Address: ");
-                Serial.println(WiFi.localIP());
+                Serial.println("✓ WiFi Connected Successfully!");
+                Serial.printf("✓ IP Address: %s\n", WiFi.localIP().toString());
+                // Serial.println(WiFi.localIP());
                 updateBLEStatus("WiFi Connected!");
                 provisioningComplete = true;
 
-                Serial.println("\n========================================");
-                Serial.println("   Initializing Firebase");
-                Serial.println("========================================");
+                Serial.println("\n");
+                Serial.println("    ╔═══════════════════════════════════════════════════╗");
+                Serial.println("    ║           Initializing Firebase (loop)...         ║");
+                Serial.println("    ╚═══════════════════════════════════════════════════╝");
+                Serial.println("\n");
                 while (WiFi.status() != WL_CONNECTED)
                     delay(500);
-                delay(2000);
-                initFirebase("/trash_bins/" + getUserUID() + "/" + getBinID() + "/");
-
-                // Set Firebase path
-                firebaseSetPath(getUserUID() + "/" + getBinID());
-                firebaseSetData("", "");
 
                 // Saving to NVS
                 setPreferences(getSSID(), getPassword(), getUserUID(), getBinID());
+                delay(1200);
+                savedPrefs = getPreferences();
+                ssid = savedPrefs[0];
+                password = savedPrefs[1];
+                userUID = savedPrefs[2];
+                binID = savedPrefs[3];
+
+                // Set Firebase path
+                firebaseSetPath(getUserUID() + "/" + getBinID());
+
+                initFirebase("trash_bins/" + getUserUID() + "/" + getBinID() + "/");
             }
             else
             {
@@ -167,6 +189,22 @@ void loop()
                 clearCredentials();
                 provisioningComplete = false;
             }
+        }
+
+        if (wifiConnected && firebaseReady() && !initFirebaseRTDB)
+        {
+            String *firebaseData = getfirebaseData();
+            if (!(firebaseData[0] == "null" || firebaseData[1] == "null"))
+            {
+                Serial.println(firebaseData[0] + "||" + firebaseData[0].length() + " | No need for initial data");
+                firebaseSubscribe();
+                initFirebaseRTDB = true;
+                return;
+            }
+
+            firebaseSetData("", "");
+            firebaseSubscribe();
+            initFirebaseRTDB = true;
         }
 
         if (wifiConnected && (millis() - lastWiFiCheck > WIFI_CHECK_INTERVAL))

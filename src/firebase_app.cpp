@@ -33,7 +33,8 @@ void initFirebase(const String &path)
 
     // Listen for realtime changes, continue to firebaseSetPath, subscribe
     streamClient.setSSEFilters("get,put");
-    Database.get(streamClient, path + "commands", processData, true, "SUB_COMMANDS");
+    // Database.get(streamClient, path + "commands", processData, true, "SUB_COMMANDS");
+    // Database.get(streamClient, binId + "commands", processData, true, "SUB_COMMANDS");
 }
 
 void firebaseLoop()
@@ -44,6 +45,24 @@ void firebaseLoop()
 bool firebaseReady()
 {
     return app.ready();
+}
+
+void firebaseSubscribe()
+{
+    Database.get(streamClient, binId + "commands", processData, true, "SUB_COMMANDS");
+}
+
+String *getfirebaseData()
+{
+    static String data[4];
+    data[0] = Database.get<String>(client, binId + "name");
+    data[1] = Database.get<String>(client, binId + "location");
+
+    Serial.println("Firebase data retrieved:");
+    Serial.printf("Name: %s\n", data[0].c_str());
+    Serial.printf("Location: %s\n", data[1].c_str());
+
+    return data;
 }
 
 /**
@@ -57,16 +76,37 @@ bool firebaseReady()
  */
 void firebaseSetData(const String &binName, const String &binLocation)
 {
-    // const String name = binName.length() > 0 ? binName : "Smart Dustbin 01";
-    // const String location = binLocation.length() > 0 ? binLocation : "Building A - Lobby";
-    const String cmd = "auto";
+    Serial.println("========================================");
+    Serial.println("Setting initial dustbin data...");
+    Serial.println("path: " + binId);
 
-    // Database.set<String>(client, binId + "name", name, processData, "INIT_BIN_NAME");
-    // Database.set<String>(client, binId + "location", location, processData, "INIT_BIN_LOCATION");
-    // Database.set<int>(client, binId + "fillLevel", 0, processData, "INIT_FILL_LEVEL");
-    // Database.set<int>(client, binId + "distance", 0, processData, "INIT_DISTANCE");
-    // Database.set<String>(client, binId + "/commands/mode", "auto", processData, "INIT_MODE");
-    Database.update<object_t>(client, binId + "commands", object_t("{\"command\":\"auto\"}"), processData, "DEFAULT_UPDATE_MODE");
+    JsonWriter writer;
+    object_t json, name_n, location_n, fillLevel_n, distance_n;
+    object_t commands_n, cmd_n, mode_n;
+
+    const String name = binName.length() > 0 ? binName : "Smart Dustbin Name";
+    const String location = binLocation.length() > 0 ? binLocation : "Location Name";
+    const int fillLevel = 0;
+    const int distance = 0;
+    const String cmd = "auto";
+    const String mode = "auto";
+
+    // Top-level fields
+    writer.create(name_n, "name", name);
+    writer.create(location_n, "location", location);
+    writer.create(fillLevel_n, "fillLevel", fillLevel);
+    writer.create(distance_n, "distance", distance);
+
+    // Nested commands object
+    writer.create(cmd_n, "command", cmd);
+    writer.create(mode_n, "mode", mode);
+    writer.join(commands_n, 2, cmd_n, mode_n);         // { "command":"auto","mode":"auto" }
+    writer.create(commands_n, "commands", commands_n); // { "commands": { "command":"auto","mode":"auto" } }
+
+    // Final join
+    writer.join(json, 5, name_n, location_n, fillLevel_n, distance_n, commands_n);
+    Database.set<object_t>(client, binId, json, processData, "DEFAULT_UPDATE_MODE");
+    Serial.println("========================================");
 }
 
 String firebaseGetPath()
@@ -77,9 +117,9 @@ String firebaseGetPath()
 void firebaseSetPath(const String &id)
 {
     binId = "trash_bins/" + id + "/";
-    Serial.println("----------------------");
-    Serial.printf("SETPATH=%s\n", binId.c_str());
-    Serial.println("----------------------");
+    Serial.println("========================================");
+    Serial.printf("SETPATH = %s\n", binId.c_str());
+    Serial.println("========================================");
 }
 
 /**
