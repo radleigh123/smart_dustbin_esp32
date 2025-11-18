@@ -11,8 +11,11 @@ FirebaseApp app;
 RealtimeDatabase Database;
 
 String cachedCommand = "auto";
+String cachedTask = "normal";
 
 String binId = "trash_bins/";
+
+static bool isReset = false;
 
 void initFirebase(const String &path)
 {
@@ -32,7 +35,8 @@ void initFirebase(const String &path)
     Database.url(FIREBASE_HOST);
 
     // Listen for realtime changes, continue to firebaseSetPath, subscribe
-    streamClient.setSSEFilters("get,put");
+    streamClient.setSSEFilters("get,put,patch");
+    delay(1200);
     // Database.get(streamClient, path + "commands", processData, true, "SUB_COMMANDS");
     // Database.get(streamClient, binId + "commands", processData, true, "SUB_COMMANDS");
 }
@@ -50,6 +54,25 @@ bool firebaseReady()
 void firebaseSubscribe()
 {
     Database.get(streamClient, binId + "commands", processData, true, "SUB_COMMANDS");
+}
+
+void firebaseReset()
+{
+    isReset = true;
+    Database.resetApp();
+}
+
+String firebaseGetPath()
+{
+    return binId;
+}
+
+void firebaseSetPath(const String &id)
+{
+    binId = "trash_bins/" + id + "/";
+    Serial.println("========================================");
+    Serial.printf("SETPATH = %s\n", binId.c_str());
+    Serial.println("========================================");
 }
 
 String *getfirebaseData()
@@ -73,6 +96,7 @@ String *getfirebaseData()
  * distance<int>: Percentage of fill level
  * mode<String>: auto | manual
  * command<String>: auto | open | close
+ * task<String>: normal | unpair | destroy
  */
 void firebaseSetData(const String &binName, const String &binLocation)
 {
@@ -82,7 +106,7 @@ void firebaseSetData(const String &binName, const String &binLocation)
 
     JsonWriter writer;
     object_t json, name_n, location_n, fillLevel_n, distance_n;
-    object_t commands_n, cmd_n, mode_n;
+    object_t commands_n, cmd_n, mode_n, task_n;
 
     const String name = binName.length() > 0 ? binName : "Smart Dustbin Name";
     const String location = binLocation.length() > 0 ? binLocation : "Location Name";
@@ -90,6 +114,7 @@ void firebaseSetData(const String &binName, const String &binLocation)
     const int distance = 0;
     const String cmd = "auto";
     const String mode = "auto";
+    const String task = "normal";
 
     // Top-level fields
     writer.create(name_n, "name", name);
@@ -100,8 +125,9 @@ void firebaseSetData(const String &binName, const String &binLocation)
     // Nested commands object
     writer.create(cmd_n, "command", cmd);
     writer.create(mode_n, "mode", mode);
-    writer.join(commands_n, 2, cmd_n, mode_n);         // { "command":"auto","mode":"auto" }
-    writer.create(commands_n, "commands", commands_n); // { "commands": { "command":"auto","mode":"auto" } }
+    writer.create(task_n, "task", task);
+    writer.join(commands_n, 3, cmd_n, mode_n, task_n); // { "command":"auto","mode":"auto","task":"normal" }
+    writer.create(commands_n, "commands", commands_n); // { "commands": { "command":"auto","mode":"auto","task":"normal" } }
 
     // Final join
     writer.join(json, 5, name_n, location_n, fillLevel_n, distance_n, commands_n);
@@ -109,17 +135,9 @@ void firebaseSetData(const String &binName, const String &binLocation)
     Serial.println("========================================");
 }
 
-String firebaseGetPath()
+void firebaseDeleteData()
 {
-    return binId;
-}
-
-void firebaseSetPath(const String &id)
-{
-    binId = "trash_bins/" + id + "/";
-    Serial.println("========================================");
-    Serial.printf("SETPATH = %s\n", binId.c_str());
-    Serial.println("========================================");
+    Database.remove(client, binId, processData, "DELETE_DATA_TASK");
 }
 
 /**
@@ -184,6 +202,9 @@ void processData(AsyncResult &result)
         if (data == "auto" || data == "open" || data == "close")
             cachedCommand = data;
 
+        if (data == "normal" || data == "unpair" || data == "destroy")
+            cachedTask = data;
+
         Serial.println("========================================");
         Firebase.printf("task: %s\n", result.uid().c_str());
         Firebase.printf("event: %s\n", stream.event().c_str());
@@ -202,4 +223,25 @@ void processData(AsyncResult &result)
 String getCommand()
 {
     return cachedCommand;
+}
+
+String getTask()
+{
+    return cachedTask;
+}
+
+void setTask(String task)
+{
+    cachedTask = task;
+
+    if (isReset)
+        return;
+
+    JsonWriter writer;
+    object_t json, task_n;
+
+    writer.create(task_n, "task", task);
+    writer.join(json, 1, task_n);
+
+    Database.update<object_t>(client, binId + "commands", json, processData, "UPDATE_CMD_TASK");
 }

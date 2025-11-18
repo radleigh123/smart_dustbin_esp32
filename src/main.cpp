@@ -18,6 +18,7 @@ const unsigned long WIFI_CHECK_INTERVAL = 10000;
 
 // Prevents loop on initializing firebase data
 static bool initFirebaseRTDB = false;
+static bool isDestroyed = false;
 
 static String *savedPrefs;
 static String ssid = "";
@@ -26,6 +27,7 @@ static String userUID = "";
 static String binID = "";
 
 String currentCmd = "";
+String currentTask = "";
 
 void setup(void)
 {
@@ -114,6 +116,38 @@ void loop()
     unsigned long currentMillis = millis();
     firebaseLoop();
 
+    currentTask = getTask();
+    if (currentTask == "unpair")
+    {
+        setTask("normal"); // Reset to normal, to avoid loop executions
+        delay(1200);
+        // NO FUNCTIONALITIES AS OF YET
+        Serial.println("\n");
+        Serial.println("    ╔═══════════════════════════════════════════════════╗");
+        Serial.println("    ║             FIREBASE DATA NODE UNPAIRED           ║");
+        Serial.println("    ╚═══════════════════════════════════════════════════╝");
+        Serial.println("\n");
+    }
+    else if (currentTask == "destroy")
+    {
+        isDestroyed = true;
+
+        firebaseDeleteData();
+        firebaseReset();
+        setTask("normal"); // Reset to normal, to avoid loop executions
+        delay(1200);
+
+        initBLE();
+        clearCredentials(); // Resets data on BLE, letting user BLE provision again
+        provisioningComplete = false;
+
+        Serial.println("\n");
+        Serial.println("    ╔═══════════════════════════════════════════════════╗");
+        Serial.println("    ║             FIREBASE DATA NODE REMOVED            ║");
+        Serial.println("    ╚═══════════════════════════════════════════════════╝");
+        Serial.println("\n");
+    }
+
     // Servo mode: AUTO (default) | MANUAL
     currentCmd = getCommand();
     if (currentCmd == "auto")
@@ -130,19 +164,21 @@ void loop()
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
-        if (hasCredentials())
+        if (hasCredentials() && !provisioningComplete)
         {
             wifiConnected = connectWiFi(getSSID(), getPassword());
+            while (WiFi.status() != WL_CONNECTED)
+                delay(500);
 
             if (wifiConnected)
             {
+                isDestroyed = false;
+
                 Serial.println();
                 Serial.println("    ╔═══════════════════════════════════════════════════╗");
                 Serial.println("    ║           Initializing Firebase (loop)...         ║");
                 Serial.println("    ╚═══════════════════════════════════════════════════╝");
                 Serial.println();
-                while (WiFi.status() != WL_CONNECTED)
-                    delay(500);
 
                 // Saving to NVS
                 ssid = getSSID();
@@ -158,7 +194,7 @@ void loop()
                 userUID = savedPrefs[2];
                 binID = savedPrefs[3];
 
-                provisioningComplete = true; // TODO: maybe refactor because it has the same purpose as `initFirebaseRTDB`
+                provisioningComplete = true;
 
                 // Set Firebase path
                 firebaseSetPath(userUID + "/" + binID);
@@ -169,11 +205,15 @@ void loop()
             {
                 Serial.println("\n✗ WiFi Connection Failed!");
                 Serial.println("Please check your credentials and try again.");
-                updateBLEStatus("WiFi connection failed");
 
-                // Clear credentials so user can try again
-                clearCredentials();
+                // Clear credentials so user can try again (DEPRECATED)
+                // REASON FOR DEPRECATION: User may have slow connection
+                // SOLUTION: Implement a timer/count for a valid reset
                 provisioningComplete = false;
+                initFirebaseRTDB = false;
+
+                // clearCredentials();
+                // provisioningComplete = false;
             }
         }
 
@@ -199,17 +239,21 @@ void loop()
         if (wifiConnected && (millis() - lastWiFiCheck > WIFI_CHECK_INTERVAL))
         {
             lastWiFiCheck = millis();
-            checkWiFiConnection();
 
-            if (!isWifiConnected())
+            if (!isWifiConnected() && initFirebaseRTDB)
             {
                 Serial.println("WiFi connection lost! Reconnecting...");
                 wifiConnected = connectWiFi(ssid, password);
+                while (WiFi.status() != WL_CONNECTED)
+                    delay(500);
             }
         }
 
         if (wifiConnected)
         {
+            if (isDestroyed)
+                return;
+
             // Stops ultrasonic from updating the distance if lid is open
             if (currentCmd == "open")
                 return;

@@ -335,5 +335,7 @@ void clearCredentials()
     userUID = "";
     binID = "";
     credentialsReceived = false;
-    Serial.println("BLE: Credentials cleared");
+    Serial.println("    ╔═══════════════════════════════════════════════════╗");
+    Serial.println("    ║             BLE: Credentials cleared              ║");
+    Serial.println("    ╚═══════════════════════════════════════════════════╝");
 }

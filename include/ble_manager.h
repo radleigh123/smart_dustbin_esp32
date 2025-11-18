@@ -22,8 +22,8 @@ String getSSID();
 String getPassword();
 String getUserUID();
 String getBinID();
+String scanWifiNetworks();
 bool hasCredentials();
 void clearCredentials();
-String scanWifiNetworks();
 
 #endif

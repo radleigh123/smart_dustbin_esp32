@@ -12,14 +12,20 @@ void initFirebase(const String &path);
 void firebaseLoop();
 bool firebaseReady();
 void firebaseSubscribe();
-void firebaseSetData(const String &binName, const String &binLocation);
-void firebaseSetPath(const String &id);
+void firebaseReset();
+
 String firebaseGetPath();
-void firebaseSubscribe();
+void firebaseSetPath(const String &id);
 String *getfirebaseData();
+void firebaseSetData(const String &binName, const String &binLocation);
+void firebaseDeleteData();
+
 void firebaseUpdateUltrasonicData(float distance);
+
 void processData(AsyncResult &result);
 
 String getCommand();
+String getTask();
+void setTask(String task);
 
 #endif // FIREBASE_APP_H
