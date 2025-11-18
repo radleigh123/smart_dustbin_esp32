@@ -1,7 +1,6 @@
 #include "ble_manager.h"
 #include "wifi_manager.h"
 #include "servo_controller.h"
-#include <WiFi.h>
 
 // BLE Server and Characteristics
 static NimBLEServer *pServer = nullptr;
@@ -94,20 +93,13 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
         {
             wifiSSID = String(value.c_str());
             Serial.printf("BLE: SSID received: %s\n", wifiSSID.c_str());
-            updateBLEStatus("SSID received");
+            // updateBLEStatus("SSID received");
         }
         else if (pCharacteristic->getUUID().equals(NimBLEUUID(PASS_CHAR_UUID)))
         {
             wifiPassword = String(value.c_str());
             Serial.println("BLE: Password received (hidden for security)");
-            updateBLEStatus("Credentials received");
-
-            credentialsReceived = true;
-
-            if (hasCredentials())
-            {
-                Serial.println("BLE: Complete credentials received - ready to connect");
-            }
+            // updateBLEStatus("Password received");
         }
         else if (pCharacteristic->getUUID().equals(NimBLEUUID(SERVO_CHAR_UUID)))
         {
@@ -128,13 +120,20 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
         {
             userUID = String(value.c_str());
             Serial.printf("BLE: User UID received: %s\n", userUID.c_str());
-            updateBLEStatus("User UID received");
+            // updateBLEStatus("User UID received");
         }
         else if (pCharacteristic->getUUID().equals(NimBLEUUID(BINID_CHAR_UUID)))
         {
             binID = String(value.c_str());
             Serial.printf("BLE: Bin ID received: %s\n", binID.c_str());
-            updateBLEStatus("Bin ID received");
+            // updateBLEStatus("Bin ID received");
+
+            if (!hasCredentials())
+            {
+                credentialsReceived = true;
+                Serial.println("BLE: Complete credentials received - ready to connect");
+                delay(500);
+            }
         }
     }
 
@@ -323,7 +322,7 @@ String getBinID()
  */
 bool hasCredentials()
 {
-    return credentialsReceived && wifiSSID.length() > 0 && wifiPassword.length() > 0;
+    return credentialsReceived && wifiSSID.length() > 0 && wifiPassword.length() > 0 && userUID.length() > 0 && binID.length() > 0;
 }
 
 /**
@@ -333,6 +332,8 @@ void clearCredentials()
 {
     wifiSSID = "";
     wifiPassword = "";
+    userUID = "";
+    binID = "";
     credentialsReceived = false;
     Serial.println("BLE: Credentials cleared");
 }
