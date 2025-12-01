@@ -4,7 +4,9 @@ This will explain on how the mobile client application links with a Smart Dustbi
 
 ## 1. ESP32 Initial Boot Sequence
 
-![ESP32 INIT](./img/BLE_PROVISION/SmartDustbin-INIT.png)
+<p align="center">
+<img alt="ESP32 INIT" src="./img/BLE_PROVISION/SmartDustbin-INIT.png" width="600">
+</p>
 
 When the ESP32 powers on for the very first time (or after a factory reset), it performs the following initialization steps in order:
 
@@ -25,7 +27,9 @@ When the ESP32 powers on for the very first time (or after a factory reset), it 
 
 ## 2. Client App - Empty Dashboard
 
-![DASHBOARD EMPTY](./img/BLE_PROVISION/SmartDustbin-EMPTY.jpg)
+<p align="center">
+<img alt="Empty dashboard" src="./img/BLE_PROVISION/SmartDustbin-EMPTY.jpg" width="400">
+</p>
 
 ### When “Add Bin” Is Clicked
 
@@ -35,7 +39,9 @@ When the ESP32 powers on for the very first time (or after a factory reset), it 
 
 ## 3. Select an ESP32 Device (BLE Scan)
 
-![BLE INIT](./img/BLE_PROVISION/SmartDustbin-BLE.jpg)
+<p align="center">
+<img alt="BLE INIT" src="./img/BLE_PROVISION/SmartDustbin-BLE.jpg" width="400">
+</p>
 
 Each entry displays:
 
@@ -58,7 +64,9 @@ Selecting a device initiates the Wi-Fi provisioning flow.
 
 ## 4. Wi-Fi Selection & Credential Input
 
-![WIFI SCAN](./img/BLE_PROVISION/SmartDustbin-WIFI.jpg)
+<p align="center">
+<img alt="WIFI SCAN" src="./img/BLE_PROVISION/SmartDustbin-WIFI.jpg" width="400">
+</p>
 
 ### When the User Clicks **“Connect to Wi-Fi”**
 
@@ -69,7 +77,9 @@ Selecting a device initiates the Wi-Fi provisioning flow.
 
 ## 5. ESP32 After Provisioning Success
 
-![BLE SUCCESS](./img/BLE_PROVISION/SmartDustbin-INIT_2.png)
+<p align="center">
+<img alt="BLE SUCCESS" src="./img/BLE_PROVISION/SmartDustbin-INIT_2.png" width="600">
+</p>
 
 Once Wi-Fi connection is successful, the ESP32 logs `_WiFi Connected_` and then the device retrieves the assigned IP address.  Firebase RTDB sync routines begin (initializing listeners, uploading bin state, etc.)
 
@@ -77,6 +87,8 @@ This confirmation ensures the dustbin is officially linked to the user’s accou
 
 ## 6. Final - Dustbin Added
 
-![DASHBOARD DONE](./img/BLE_PROVISION/SmartDustbin-DONE.jpg)
+<p align="center">
+<img alt="DASHBOARD DONE" src="./img/BLE_PROVISION/SmartDustbin-DONE.jpg" width="400">
+</p>
 
 After successful provisioning, the user is redirected back to the main dashboard. From this point onward, the device communicates with Firebase RTDB and will no longer require BLE unless reconfigured. Even if its Wi-Fi connections get lost, it will constantly try to reconnect based on the saved preferences (`ssid` & `password`).
