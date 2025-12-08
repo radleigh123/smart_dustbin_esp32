@@ -81,3 +81,25 @@ void clearBootPref()
     Serial.println("    ╚═══════════════════════════════════════════════════╝");
     Serial.println();
 }
+
+void setProvisioningAttempts(int attempts)
+{
+    pref.begin("provisioning", false);
+    pref.putInt("attempts", attempts);
+    pref.end();
+}
+
+int getProvisioningAttempts()
+{
+    pref.begin("provisioning", true);
+    int attempts = pref.getInt("attempts", 0);
+    pref.end();
+    return attempts;
+}
+
+void resetProvisioningAttempts()
+{
+    pref.begin("provisioning", false);
+    pref.putInt("attempts", 0);
+    pref.end();
+}

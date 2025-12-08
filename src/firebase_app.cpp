@@ -199,11 +199,21 @@ void processData(AsyncResult &result)
     {
         const String data = stream.to<const char *>();
 
-        if (data == "auto" || data == "open" || data == "close")
-            cachedCommand = data;
+        // if (data == "auto" || data == "open" || data == "close")
+        //     cachedCommand = data;
+        if (data == "{\"command\":\"open\",\"mode\":\"manual\",\"task\":\"normal\"}")
+            cachedCommand = "open";
+        else if (data == "{\"command\":\"close\",\"mode\":\"manual\",\"task\":\"normal\"}")
+            cachedCommand = "close";
+        else
+            cachedCommand = "auto";
+
+        Serial.printf("\ncached command: %s\n", cachedCommand.c_str());
 
         if (data == "normal" || data == "unpair" || data == "destroy")
+        {
             cachedTask = data;
+        }
 
         Serial.println("========================================");
         Firebase.printf("task: %s\n", result.uid().c_str());
@@ -223,6 +233,21 @@ void processData(AsyncResult &result)
 String getCommand()
 {
     return cachedCommand;
+}
+
+void setCommand(String cmd)
+{
+    cachedCommand = cmd;
+    String mode = cmd != "auto" ? "manual" : "auto";
+
+    JsonWriter writer;
+    object_t json, cmd_n, mode_n;
+
+    writer.create(cmd_n, "command", cmd);
+    writer.create(mode_n, "mode", mode);
+    writer.join(json, 2, cmd_n, mode_n);
+
+    Database.update<object_t>(client, binId + "commands", json, processData, "UPDATE_CMD_TASK");
 }
 
 String getTask()

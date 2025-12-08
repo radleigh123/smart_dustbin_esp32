@@ -20,6 +20,11 @@ const unsigned long WIFI_CHECK_INTERVAL = 10000;
 static bool initFirebaseRTDB = false;
 static bool isDestroyed = false;
 
+// Provisioning retry management
+static unsigned long lastProvisioningAttempt = 0;
+const unsigned long PROVISIONING_RETRY_INTERVAL = 30000; // Retry every 30 seconds
+const int MAX_PROVISIONING_ATTEMPTS = 5;                 // Clear credentials after 5 failed attempts
+
 static String *savedPrefs;
 static String ssid = "";
 static String password = "";
@@ -28,6 +33,10 @@ static String binID = "";
 
 String currentCmd = "";
 String currentTask = "";
+int currentAngle = -1;
+
+unsigned long closeTimestamp = 0;
+const unsigned long AUTO_TIMEOUT = 30000;
 
 void setup(void)
 {
@@ -66,6 +75,9 @@ void setup(void)
 
         if (wifiConnected)
         {
+            // Reset provisioning attempt counter on successful connection
+            resetProvisioningAttempts();
+
             // Init Firebase
             Serial.println("\n");
             Serial.println("    ╔═══════════════════════════════════════════════════╗");
@@ -78,10 +90,17 @@ void setup(void)
             initFirebase("trash_bins/" + userUID + "/" + binID + "/");
 
             // This ensures subscription runs only after Firebase is ready
+            unsigned long firebaseWaitStart = millis();
             while (!firebaseReady())
             {
                 firebaseLoop();
                 delay(10);
+                // Timeout: 30 seconds for Firebase initialization
+                if (millis() - firebaseWaitStart > 30000)
+                {
+                    Serial.println("Firebase initialization timeout!");
+                    break;
+                }
             }
 
             provisioningComplete = true;
@@ -91,14 +110,41 @@ void setup(void)
         }
         else
         {
-            Serial.println("Saved WiFi re-provisioning needed!");
+            Serial.println("Saved WiFi credentials exist but connection failed.");
+            Serial.println("Device will retry connection in main loop.");
         }
     }
 
     if (!(wifiConnected && provisioningComplete))
     {
-        clearWifiPref();
-        clearBootPref();
+        // Only clear credentials if they've failed too many times
+        if (hasCredentials() && getProvisioningAttempts() >= MAX_PROVISIONING_ATTEMPTS)
+        {
+            Serial.println("\n");
+            Serial.println("    ╔═══════════════════════════════════════════════════╗");
+            Serial.println("    ║   Max provisioning attempts exceeded. Clearing    ║");
+            Serial.println("    ║          credentials for re-provisioning          ║");
+            Serial.println("    ╚═══════════════════════════════════════════════════╝");
+            Serial.println("\n");
+            clearWifiPref();
+            clearBootPref();
+            resetProvisioningAttempts();
+        }
+        else if (hasCredentials())
+        {
+            // Credentials exist but connection failed - increment attempt counter
+            int attempts = getProvisioningAttempts();
+            setProvisioningAttempts(attempts + 1);
+            Serial.printf("Provisioning attempt %d/%d...\n", attempts + 1, MAX_PROVISIONING_ATTEMPTS);
+        }
+        else
+        {
+            // No credentials at all - clear and initialize BLE
+            clearWifiPref();
+            clearBootPref();
+            resetProvisioningAttempts();
+        }
+
         initBLE();
         Serial.println("\n");
         Serial.println("    ╔═══════════════════════════════════════════════════╗");
@@ -152,68 +198,99 @@ void loop()
     currentCmd = getCommand();
     if (currentCmd == "auto")
     {
+        // Serial.printf("\nAUTO: %s\n", currentCmd.c_str());
+        currentAngle = -1;
         controlLidAuto(currentMillis);
     }
     else
     {
         if (currentCmd == "open")
-            openLid();
+        {
+            // This prevents repetitive openLid call
+            if (currentAngle != 0)
+            {
+                currentAngle = 0;
+                openLid();
+            }
+            closeTimestamp = 0;
+        }
         else
-            closeLid();
+        {
+            if (currentAngle != 90)
+            {
+                currentAngle = 90;
+                closeLid();
+                closeTimestamp = millis();
+            }
+
+            if (closeTimestamp > 0 && millis() - closeTimestamp >= AUTO_TIMEOUT)
+            {
+                setCommand("auto");
+                currentCmd = "auto";
+                Serial.println("\nTimeout reached, switching to AUTO MODE\n");
+            }
+        }
+
+        // Serial.printf("\nMANUAL: %s\n", currentCmd.c_str());
     }
 
     if (currentMillis - lastMainLoopMillis >= MAIN_LOOP_INTERVAL)
     {
         if (hasCredentials() && !provisioningComplete)
         {
-            wifiConnected = connectWiFi(getSSID(), getPassword());
-            while (WiFi.status() != WL_CONNECTED)
-                delay(500);
+            // Implement retry logic with exponential backoff
+            unsigned long timeSinceLastAttempt = currentMillis - lastProvisioningAttempt;
 
-            if (wifiConnected)
+            if (lastProvisioningAttempt == 0 || timeSinceLastAttempt >= PROVISIONING_RETRY_INTERVAL)
             {
-                isDestroyed = false;
+                lastProvisioningAttempt = currentMillis;
+                Serial.println("\n    [PROVISIONING] Attempting WiFi connection from main loop...");
 
-                Serial.println();
-                Serial.println("    ╔═══════════════════════════════════════════════════╗");
-                Serial.println("    ║           Initializing Firebase (loop)...         ║");
-                Serial.println("    ╚═══════════════════════════════════════════════════╝");
-                Serial.println();
+                wifiConnected = connectWiFi(getSSID(), getPassword());
 
-                // Saving to NVS
-                ssid = getSSID();
-                password = getPassword();
-                userUID = getUserUID();
-                binID = getBinID();
-                // Serial.printf("ssid=%s, password=%s, userUid=%s, binId=%s\n", ssid, password, userUID.c_str(), binID.c_str());
-                setWifiPref(ssid, password, userUID, binID);
-                delay(1200);
-                savedPrefs = getWifiPref();
-                ssid = savedPrefs[0];
-                password = savedPrefs[1];
-                userUID = savedPrefs[2];
-                binID = savedPrefs[3];
+                if (wifiConnected)
+                {
+                    isDestroyed = false;
+                    resetProvisioningAttempts(); // Reset counter on success
 
-                provisioningComplete = true;
+                    // Don't block here - let Firebase initialize asynchronously
+                    Serial.println();
+                    Serial.println("    ╔═══════════════════════════════════════════════════╗");
+                    Serial.println("    ║           Initializing Firebase (async)...        ║");
+                    Serial.println("    ╚═══════════════════════════════════════════════════╝");
+                    Serial.println();
 
-                // Set Firebase path
-                firebaseSetPath(userUID + "/" + binID);
+                    // Saving to NVS
+                    ssid = getSSID();
+                    password = getPassword();
+                    userUID = getUserUID();
+                    binID = getBinID();
+                    setWifiPref(ssid, password, userUID, binID);
+                    delay(500);
 
-                initFirebase("trash_bins/" + userUID + "/" + binID + "/");
-            }
-            else
-            {
-                Serial.println("\n✗ WiFi Connection Failed!");
-                Serial.println("Please check your credentials and try again.");
+                    savedPrefs = getWifiPref();
+                    ssid = savedPrefs[0];
+                    password = savedPrefs[1];
+                    userUID = savedPrefs[2];
+                    binID = savedPrefs[3];
 
-                // Clear credentials so user can try again (DEPRECATED)
-                // REASON FOR DEPRECATION: User may have slow connection
-                // SOLUTION: Implement a timer/count for a valid reset
-                provisioningComplete = false;
-                initFirebaseRTDB = false;
-
-                // clearCredentials();
-                // provisioningComplete = false;
+                    provisioningComplete = true;
+                    firebaseSetPath(userUID + "/" + binID);
+                    initFirebase("trash_bins/" + userUID + "/" + binID + "/");
+                }
+                else
+                {
+                    int attempts = getProvisioningAttempts();
+                    if (attempts < MAX_PROVISIONING_ATTEMPTS)
+                    {
+                        Serial.printf("\n✗ WiFi Connection Failed! (Attempt %d/%d)\n", attempts + 1, MAX_PROVISIONING_ATTEMPTS);
+                        Serial.println("Will retry in 30 seconds...");
+                    }
+                    else
+                    {
+                        Serial.println("\n✗ Max provisioning attempts reached. Entering BLE provisioning mode.");
+                    }
+                }
             }
         }
 

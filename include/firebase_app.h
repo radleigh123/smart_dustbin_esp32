@@ -25,6 +25,7 @@ void firebaseUpdateUltrasonicData(float distance);
 void processData(AsyncResult &result);
 
 String getCommand();
+void setCommand(String cmd);
 String getTask();
 void setTask(String task);
 

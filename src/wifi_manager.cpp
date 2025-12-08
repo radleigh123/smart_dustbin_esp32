@@ -1,6 +1,10 @@
 #include "wifi_manager.h"
 #include "ble_manager.h"
 
+static unsigned long lastWiFiAttempt = 0;
+static String lastSSID = "";
+static String lastPassword = "";
+
 void initWiFi()
 {
     WiFi.mode(WIFI_STA);
@@ -39,6 +43,36 @@ bool connectWiFi(String ssid, String password)
     }
 }
 
+bool connectWiFiNonBlocking(String ssid, String password)
+{
+    // If this is a new connection attempt (different SSID/password)
+    if (lastSSID != ssid || lastPassword != password)
+    {
+        lastSSID = ssid;
+        lastPassword = password;
+        lastWiFiAttempt = millis();
+        WiFi.begin(ssid.c_str(), password.c_str());
+        Serial.println("    ║                  WiFi: Connecting...              ║");
+        return false; // Still connecting
+    }
+
+    // If already connected, return true
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        return true;
+    }
+
+    // If still within timeout window (10 seconds for non-blocking), keep trying
+    if (millis() - lastWiFiAttempt < 10000)
+    {
+        return false; // Still attempting
+    }
+
+    // Timeout reached, return false
+    Serial.println("WiFi: Non-blocking connection timeout!");
+    return false;
+}
+
 bool isWifiConnected()
 {
     return WiFi.status() == WL_CONNECTED;
@@ -50,6 +84,11 @@ void checkWiFiConnection()
     {
         Serial.println("WiFi: Connection lost");
     }
+}
+
+unsigned long getLastWiFiAttempt()
+{
+    return lastWiFiAttempt;
 }
 
 String getWiFiStatus()
@@ -76,3 +115,4 @@ String getWiFiStatus()
         return "Unknown";
     }
 }
+

@@ -12,4 +12,9 @@ void setBoot();
 int getBoot();
 void clearBootPref();
 
+// Provisioning retry tracking
+void setProvisioningAttempts(int attempts);
+int getProvisioningAttempts();
+void resetProvisioningAttempts();
+
 #endif
