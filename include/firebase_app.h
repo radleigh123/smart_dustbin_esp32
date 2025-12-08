@@ -8,19 +8,22 @@
 #include <WiFiClientSecure.h>
 #include "config.h"
 
-void initFirebase(const String &path);
+void initFirebase();
 void firebaseLoop();
 bool firebaseReady();
 void firebaseSubscribe();
 void firebaseReset();
 
 String firebaseGetPath();
-void firebaseSetPath(const String &id);
+void firebaseSetPath(const String &userId, const String &binId);
 String *getfirebaseData();
 void firebaseSetData(const String &binName, const String &binLocation);
+void firebaseUpdateData(const String &binName, const String &binLocation);
 void firebaseDeleteData();
 
 void firebaseUpdateUltrasonicData(float distance);
+
+void firebaseAddActivitiesData(const String timestamp, const String title, String message);
 
 void processData(AsyncResult &result);
 

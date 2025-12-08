@@ -5,6 +5,7 @@
 #include "ultrasonic_sensor.h"
 #include "firebase_app.h"
 #include "pref_manager.h"
+#include "activities.h"
 
 // State variables
 static unsigned long lastMainLoopMillis = 0;
@@ -87,7 +88,12 @@ void setup(void)
             while (WiFi.status() != WL_CONNECTED)
                 delay(500);
             delay(2000);
-            initFirebase("trash_bins/" + userUID + "/" + binID + "/");
+
+            firebaseSetPath(userUID, binID);
+            initFirebase();
+
+            // Init Time
+            initTime();
 
             // This ensures subscription runs only after Firebase is ready
             unsigned long firebaseWaitStart = millis();
@@ -104,9 +110,6 @@ void setup(void)
             }
 
             provisioningComplete = true;
-
-            firebaseSetPath(userUID + "/" + binID);
-            // firebaseSetData("", "");
         }
         else
         {
@@ -166,6 +169,7 @@ void loop()
     if (currentTask == "unpair")
     {
         setTask("normal"); // Reset to normal, to avoid loop executions
+        printLocalTime();
         delay(1200);
         // NO FUNCTIONALITIES AS OF YET
         Serial.println("\n");
@@ -201,6 +205,7 @@ void loop()
         // Serial.printf("\nAUTO: %s\n", currentCmd.c_str());
         currentAngle = -1;
         controlLidAuto(currentMillis);
+        // firebaseAddActivitiesData(getLocalTime(), "First Boot", "Smart Dustbin initiated");
     }
     else
     {
@@ -228,6 +233,7 @@ void loop()
                 setCommand("auto");
                 currentCmd = "auto";
                 Serial.println("\nTimeout reached, switching to AUTO MODE\n");
+                firebaseAddActivitiesData(getLocalTime(), "Switch Auto", "switched back to auto-mode");
             }
         }
 
@@ -275,8 +281,8 @@ void loop()
                     binID = savedPrefs[3];
 
                     provisioningComplete = true;
-                    firebaseSetPath(userUID + "/" + binID);
-                    initFirebase("trash_bins/" + userUID + "/" + binID + "/");
+                    firebaseSetPath(userUID, binID);
+                    initFirebase();
                 }
                 else
                 {
@@ -298,11 +304,14 @@ void loop()
         if (wifiConnected && firebaseReady() && !initFirebaseRTDB)
         {
             String *firebaseData = getfirebaseData();
+            String name = firebaseData[0];
+            String location = firebaseData[1];
 
             // This ensures existing dustbin's data will not be overwritten
             if (!(firebaseData[0] == "null" || firebaseData[1] == "null"))
             {
                 Serial.println("No need for initial data");
+                firebaseUpdateData(name, location);
                 firebaseSubscribe();
                 initFirebaseRTDB = true;
                 return;
@@ -310,6 +319,7 @@ void loop()
 
             firebaseSetData("", "");
             firebaseSubscribe();
+            firebaseAddActivitiesData(getLocalTime(), "First Boot", "Smart Dustbin initiated");
             initFirebaseRTDB = true;
         }
 

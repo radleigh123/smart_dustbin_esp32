@@ -3,6 +3,8 @@
 #include "config.h"
 #include "servo_controller.h"
 #include "ir_sensor.h"
+#include "activities.h"
+#include "firebase_app.h"
 
 static Servo myServo;
 
@@ -12,7 +14,7 @@ static const int CLOSE_ANGLE = 90;
 static bool isLidOpen = false;
 static unsigned long lidOpenTime = 0;
 
-const unsigned long LID_OPEN_DURATION = 3000; // Time to keep lid open in ms
+const unsigned long LID_OPEN_DURATION = 2500; // Time to keep lid open in ms
 
 bool isLidCurrentlyOpen()
 {
@@ -67,10 +69,12 @@ void controlLidAuto(unsigned long currentMillis) {
     if (detected && !isLidOpen)
     {
         openLid();
+        firebaseAddActivitiesData(getLocalTime(), "Auto Open", "opened automatically");
     }
 
     if (!detected && isLidOpen && (currentMillis - lidOpenTime >= LID_OPEN_DURATION))
     {
         closeLid();
+        firebaseAddActivitiesData(getLocalTime(), "Auto Close", "closed automatically");
     }
 }

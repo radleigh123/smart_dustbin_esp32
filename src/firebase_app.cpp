@@ -13,11 +13,15 @@ RealtimeDatabase Database;
 String cachedCommand = "auto";
 String cachedTask = "normal";
 
-String binId = "trash_bins/";
+String trashPath = "trash_bins/";
+String activityPath = "activities/";
+
+String cachedBinName = "";
+String cachedBinLocation = "";
 
 static bool isReset = false;
 
-void initFirebase(const String &path)
+void initFirebase()
 {
     // Configure SSL client
     ssl_client.setInsecure(); // NOTE: Use with caution - accepts any certificate
@@ -53,7 +57,7 @@ bool firebaseReady()
 
 void firebaseSubscribe()
 {
-    Database.get(streamClient, binId + "commands", processData, true, "SUB_COMMANDS");
+    Database.get(streamClient, trashPath + "commands", processData, true, "SUB_COMMANDS");
 }
 
 void firebaseReset()
@@ -64,22 +68,24 @@ void firebaseReset()
 
 String firebaseGetPath()
 {
-    return binId;
+    return trashPath;
 }
 
-void firebaseSetPath(const String &id)
+void firebaseSetPath(const String &userId, const String &binId)
 {
-    binId = "trash_bins/" + id + "/";
+    trashPath += (userId + "/" + binId + "/");
+    activityPath += (userId + "/");
     Serial.println("========================================");
-    Serial.printf("SETPATH = %s\n", binId.c_str());
+    Serial.printf("SETPATH (trashpath)      = %s\n", trashPath.c_str());
+    Serial.printf("SETPATH (activitypath)   = %s\n", activityPath.c_str());
     Serial.println("========================================");
 }
 
 String *getfirebaseData()
 {
     static String data[4];
-    data[0] = Database.get<String>(client, binId + "name");
-    data[1] = Database.get<String>(client, binId + "location");
+    data[0] = Database.get<String>(client, trashPath + "name");
+    data[1] = Database.get<String>(client, trashPath + "location");
 
     Serial.println("Firebase data retrieved:");
     Serial.printf("Name: %s\n", data[0].c_str());
@@ -102,14 +108,14 @@ void firebaseSetData(const String &binName, const String &binLocation)
 {
     Serial.println("========================================");
     Serial.println("Setting initial dustbin data...");
-    Serial.println("path: " + binId);
+    Serial.println("path: " + trashPath);
 
     JsonWriter writer;
     object_t json, name_n, location_n, fillLevel_n, distance_n;
     object_t commands_n, cmd_n, mode_n, task_n;
 
-    const String name = binName.length() > 0 ? binName : "Smart Dustbin Name";
-    const String location = binLocation.length() > 0 ? binLocation : "Location Name";
+    cachedBinName = binName.length() > 0 ? binName : "Smart Dustbin Name";
+    cachedBinLocation = binLocation.length() > 0 ? binLocation : "Location Name";
     const int fillLevel = 0;
     const int distance = 0;
     const String cmd = "auto";
@@ -117,8 +123,8 @@ void firebaseSetData(const String &binName, const String &binLocation)
     const String task = "normal";
 
     // Top-level fields
-    writer.create(name_n, "name", name);
-    writer.create(location_n, "location", location);
+    writer.create(name_n, "name", cachedBinName);
+    writer.create(location_n, "location", cachedBinLocation);
     writer.create(fillLevel_n, "fillLevel", fillLevel);
     writer.create(distance_n, "distance", distance);
 
@@ -131,13 +137,19 @@ void firebaseSetData(const String &binName, const String &binLocation)
 
     // Final join
     writer.join(json, 5, name_n, location_n, fillLevel_n, distance_n, commands_n);
-    Database.set<object_t>(client, binId, json, processData, "DEFAULT_UPDATE_MODE");
+    Database.set<object_t>(client, trashPath, json, processData, "DEFAULT_UPDATE_MODE");
     Serial.println("========================================");
+}
+
+void firebaseUpdateData(const String &binName, const String &binLocation)
+{
+    cachedBinName = binName.length() > 0 ? binName : "Smart Dustbin Name";
+    cachedBinLocation = binLocation.length() > 0 ? binLocation : "Location Name";
 }
 
 void firebaseDeleteData()
 {
-    Database.remove(client, binId, processData, "DELETE_DATA_TASK");
+    Database.remove(client, trashPath, processData, "DELETE_DATA_TASK");
 }
 
 /**
@@ -171,9 +183,39 @@ void firebaseUpdateUltrasonicData(float distance)
     writer.create(obj2, "fillLevel", fillLevel);
     writer.join(json, 2, obj1, obj2);
 
-    Database.update<object_t>(client, binId, json, processData, "SET_DISTANCE_AND_FILL");
+    Database.update<object_t>(client, trashPath, json, processData, "SET_DISTANCE_AND_FILL");
     // Database.set<int>(client, binId + "fillLevel", fillLevel, processData, "SET_FILL_LEVEL");
     // Database.set<int>(client, binId + "distance", data, processData, "SET_DISTANCE");
+}
+
+void firebaseAddActivitiesData(const String timestamp, const String title, String message)
+{
+    int activityCount = Database.get<int>(client, activityPath + "count");
+    if (activityCount < 0)
+    {
+        activityCount = 0;
+    }
+
+    activityCount++;
+
+    String activityId = "activity_" + String(millis()) + "_" + String(activityCount);
+
+    Database.set<int>(client, activityPath + "count", activityCount, processData, "UPDATE_ACTIVITY_COUNT");
+
+    if (message != "")
+    {
+        message = cachedBinName + " " + message;
+    }
+
+    JsonWriter writer;
+    object_t json, time_n, title_n, msg_n;
+
+    writer.create(time_n, "timestamp", timestamp);
+    writer.create(title_n, "title", title);
+    writer.create(msg_n, "message", message);
+    writer.join(json, 3, time_n, title_n, msg_n);
+
+    Database.set<object_t>(client, activityPath + activityId, json, processData, "ADD_ACTIVITY_STATUS");
 }
 
 void processData(AsyncResult &result)
@@ -225,7 +267,7 @@ void processData(AsyncResult &result)
     {
         Serial.println("========================================");
         // Serial.printf("path:%s\n", result.path().c_str());
-        Serial.println("path: " + binId);
+        Serial.println("path: " + trashPath);
         Firebase.printf("task: %s, payload: %s\n", result.uid().c_str(), result.c_str());
     }
 }
@@ -247,7 +289,7 @@ void setCommand(String cmd)
     writer.create(mode_n, "mode", mode);
     writer.join(json, 2, cmd_n, mode_n);
 
-    Database.update<object_t>(client, binId + "commands", json, processData, "UPDATE_CMD_TASK");
+    Database.update<object_t>(client, trashPath + "commands", json, processData, "UPDATE_CMD_TASK");
 }
 
 String getTask()
@@ -268,5 +310,5 @@ void setTask(String task)
     writer.create(task_n, "task", task);
     writer.join(json, 1, task_n);
 
-    Database.update<object_t>(client, binId + "commands", json, processData, "UPDATE_CMD_TASK");
+    Database.update<object_t>(client, trashPath + "commands", json, processData, "UPDATE_CMD_TASK");
 }
