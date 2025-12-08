@@ -7,7 +7,7 @@
 static Servo myServo;
 
 static const int OPEN_ANGLE = 0;
-static const int CLOSE_ANGLE = 180;
+static const int CLOSE_ANGLE = 90;
 
 static bool isLidOpen = false;
 static unsigned long lidOpenTime = 0;
@@ -28,7 +28,12 @@ void initServo()
 
 void openLid()
 {
-    myServo.write(OPEN_ANGLE);
+    for (int pos = 90; pos >= OPEN_ANGLE; pos -= 1)
+    {
+        myServo.write(pos);
+        delay(5);
+    }
+    // myServo.write(OPEN_ANGLE);
     isLidOpen = true;
     lidOpenTime = millis();
     digitalWrite(LED_PIN_GREEN, HIGH);
@@ -38,7 +43,12 @@ void openLid()
 
 void closeLid()
 {
-    myServo.write(CLOSE_ANGLE);
+    for (int pos = 0; pos <= CLOSE_ANGLE; pos += 1)
+    {
+        myServo.write(pos);
+        delay(10);
+    }
+    // myServo.write(CLOSE_ANGLE);
     isLidOpen = false;
     digitalWrite(LED_PIN_GREEN, LOW);
     digitalWrite(LED_PIN_RED, HIGH);
